@@ -1,6 +1,7 @@
 import { App, Plugin, TFile, Notice } from "obsidian";
 import { GetShitDoneSettingTab } from "./settings";
 import { DEFAULT_SETTINGS, PluginSettings, SettingsAware, TemplaterObject } from "./types";
+import { deepMerge } from "./utils/deep-merge";
 
 // Services
 import { GoogleServices } from "./services/google-services";
@@ -227,82 +228,7 @@ export default class GetShitDonePlugin extends Plugin {
 
   async loadSettings() {
     const savedData = await this.loadData();
-    
-    // Deep merge to preserve new default values in nested objects
-    this.settings = {
-      ...DEFAULT_SETTINGS,
-      ...savedData,
-      // Deep merge nested objects to include new keys from defaults
-      models: {
-        ...DEFAULT_SETTINGS.models,
-        ...(savedData?.models || {}),
-      },
-      prompts: {
-        ...DEFAULT_SETTINGS.prompts,
-        ...(savedData?.prompts || {}),
-      },
-      generationConfigs: {
-        ...DEFAULT_SETTINGS.generationConfigs,
-        ...(savedData?.generationConfigs || {}),
-      },
-      o3: {
-        ...DEFAULT_SETTINGS.o3,
-        ...(savedData?.o3 || {}),
-      },
-      o3Coach: {
-        ...DEFAULT_SETTINGS.o3Coach,
-        ...(savedData?.o3Coach || {}),
-      },
-      inbox: {
-        ...DEFAULT_SETTINGS.inbox,
-        ...(savedData?.inbox || {}),
-        triggers: {
-          ...DEFAULT_SETTINGS.inbox.triggers,
-          ...(savedData?.inbox?.triggers || {}),
-        },
-        routing: {
-          ...DEFAULT_SETTINGS.inbox.routing,
-          ...(savedData?.inbox?.routing || {}),
-          rules: savedData?.inbox?.routing?.rules || DEFAULT_SETTINGS.inbox.routing.rules,
-        },
-        actionDetection: {
-          ...DEFAULT_SETTINGS.inbox.actionDetection,
-          ...(savedData?.inbox?.actionDetection || {}),
-        },
-        formatting: {
-          ...DEFAULT_SETTINGS.inbox.formatting,
-          ...(savedData?.inbox?.formatting || {}),
-        },
-        contentSummary: {
-          ...DEFAULT_SETTINGS.inbox.contentSummary,
-          ...(savedData?.inbox?.contentSummary || {}),
-        },
-      },
-      llmCouncil: {
-        ...DEFAULT_SETTINGS.llmCouncil,
-        ...(savedData?.llmCouncil || {}),
-        prompts: {
-          ...DEFAULT_SETTINGS.llmCouncil.prompts,
-          ...(savedData?.llmCouncil?.prompts || {}),
-          ideators: {
-            ...DEFAULT_SETTINGS.llmCouncil.prompts.ideators,
-            ...(savedData?.llmCouncil?.prompts?.ideators || {}),
-          },
-        },
-        ideatorModels: {
-          ...DEFAULT_SETTINGS.llmCouncil.ideatorModels,
-          ...(savedData?.llmCouncil?.ideatorModels || {}),
-        },
-        executorModels: {
-          ...DEFAULT_SETTINGS.llmCouncil.executorModels,
-          ...(savedData?.llmCouncil?.executorModels || {}),
-        },
-        generationConfig: {
-          ...DEFAULT_SETTINGS.llmCouncil.generationConfig,
-          ...(savedData?.llmCouncil?.generationConfig || {}),
-        },
-      },
-    };
+    this.settings = deepMerge(DEFAULT_SETTINGS, savedData);
   }
 
   async saveSettings() {
