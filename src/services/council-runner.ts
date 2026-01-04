@@ -70,16 +70,9 @@ function parseMarkdownWithFrontmatter(content: string): { frontmatter: Record<st
     }
   }
   
-  // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/7fa0ee0a-6987-4ecb-8ece-a40a020d7917',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'council-runner.ts:parseMarkdownWithFrontmatter',message:'Input analysis',data:{first50:cleanContent.substring(0,50),startsWithDash:cleanContent.startsWith('---'),hadCodeBlock:!!codeBlockMatch,contentLength:cleanContent.length},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'A,C'})}).catch(()=>{});
-  // #endregion
-  
   // Find frontmatter delimiters
   const frontmatterMatch = cleanContent.match(/^---\s*\n([\s\S]*?)\n---\s*\n([\s\S]*)$/);
-  // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/7fa0ee0a-6987-4ecb-8ece-a40a020d7917',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'council-runner.ts:parseMarkdownWithFrontmatter',message:'Primary regex result',data:{matched:!!frontmatterMatch},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'A'})}).catch(()=>{});
-  // #endregion
-  
+
   if (!frontmatterMatch) {
     // Try without leading newline requirement
     const altMatch = cleanContent.match(/^---\s*([\s\S]*?)---\s*([\s\S]*)$/);
@@ -90,29 +83,16 @@ function parseMarkdownWithFrontmatter(content: string): { frontmatter: Record<st
       const yamlStr = sanitizeYamlArrayItems(altMatch[1].trim());
       const frontmatter = parseYaml(yamlStr) as Record<string, unknown>;
       return { frontmatter, body: altMatch[2].trim() };
-    } catch (e) {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/7fa0ee0a-6987-4ecb-8ece-a40a020d7917',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'council-runner.ts:parseMarkdownWithFrontmatter',message:'Alt YAML parse error',data:{error:String(e)},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'B'})}).catch(()=>{});
-      // #endregion
+    } catch {
       return null;
     }
   }
   
   try {
     const yamlStr = sanitizeYamlArrayItems(frontmatterMatch[1]);
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/7fa0ee0a-6987-4ecb-8ece-a40a020d7917',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'council-runner.ts:parseMarkdownWithFrontmatter',message:'Parsing sanitized YAML',data:{yamlPreview:yamlStr.substring(0,300)},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'B'})}).catch(()=>{});
-    // #endregion
     const frontmatter = parseYaml(yamlStr) as Record<string, unknown>;
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/7fa0ee0a-6987-4ecb-8ece-a40a020d7917',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'council-runner.ts:parseMarkdownWithFrontmatter',message:'YAML parse success',data:{keys:Object.keys(frontmatter)},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'B'})}).catch(()=>{});
-    // #endregion
     return { frontmatter, body: frontmatterMatch[2].trim() };
-  } catch (e) {
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/7fa0ee0a-6987-4ecb-8ece-a40a020d7917',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'council-runner.ts:parseMarkdownWithFrontmatter',message:'Primary YAML parse error, trying fallback',data:{error:String(e)},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'B'})}).catch(()=>{});
-    // #endregion
-    
+  } catch {
     // Fallback: Extract key fields via regex when YAML parsing fails
     const rawYaml = frontmatterMatch[1];
     const fallbackFrontmatter: Record<string, unknown> = {};
@@ -148,10 +128,6 @@ function parseMarkdownWithFrontmatter(content: string): { frontmatter: Record<st
         }));
       }
     }
-    
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/7fa0ee0a-6987-4ecb-8ece-a40a020d7917',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'council-runner.ts:parseMarkdownWithFrontmatter',message:'Fallback extraction result',data:{keys:Object.keys(fallbackFrontmatter),hasThesis:!!fallbackFrontmatter.thesis},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'fallback'})}).catch(()=>{});
-    // #endregion
     
     // Only return fallback if we got at least the essential fields
     if (fallbackFrontmatter.persona_id && fallbackFrontmatter.thesis) {
