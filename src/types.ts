@@ -2,6 +2,18 @@ import { App, TFile } from "obsidian";
 import { PROMPTS } from "./prompts";
 
 // ============================================================================
+// Settings Management
+// ============================================================================
+
+/**
+ * Interface for components that need to be notified of settings changes.
+ * Implement this interface and register with the plugin to receive updates.
+ */
+export interface SettingsAware {
+  updateSettings(settings: PluginSettings): void;
+}
+
+// ============================================================================
 // Plugin Settings
 // ============================================================================
 

@@ -1,6 +1,6 @@
 import { App, Plugin, TFile, Notice } from "obsidian";
 import { GetShitDoneSettingTab } from "./settings";
-import { DEFAULT_SETTINGS, PluginSettings, TemplaterObject } from "./types";
+import { DEFAULT_SETTINGS, PluginSettings, SettingsAware, TemplaterObject } from "./types";
 
 // Services
 import { GoogleServices } from "./services/google-services";
@@ -50,6 +50,9 @@ export default class GetShitDonePlugin extends Plugin {
 
   // Track files currently being researched to prevent duplicates
   private researchingFiles: Set<string> = new Set();
+
+  // Registry of components that need settings updates
+  private settingsSubscribers: SettingsAware[] = [];
 
   async onload() {
     console.log("[GSD] Loading GetShitDone plugin");
@@ -149,6 +152,25 @@ export default class GetShitDonePlugin extends Plugin {
     this.personResearch.setFeedback(this.feedback);
     this.orgResearch.setFeedback(this.feedback);
     this.meetingBriefing.setFeedback(this.feedback);
+
+    // Register all settings-aware components
+    this.settingsSubscribers.push(
+      this.aiService,
+      this.googleServices,
+      this.vaultSearch,
+      this.indexService,
+      this.personResearch,
+      this.orgResearch,
+      this.dailyNote,
+      this.meetingBriefing,
+      this.feedback,
+      this.inbox,
+      this.llmCouncil,
+      this.amieTranscript,
+      this.o3Prep,
+      this.o3Coach,
+      this.webhookServer
+    );
 
     // Register settings tab
     this.addSettingTab(new GetShitDoneSettingTab(this.app, this));
@@ -286,22 +308,10 @@ export default class GetShitDonePlugin extends Plugin {
   async saveSettings() {
     await this.saveData(this.settings);
 
-    // Update all services and actions with new settings
-    this.aiService.updateSettings(this.settings);
-    this.googleServices.updateSettings(this.settings);
-    this.vaultSearch.updateSettings(this.settings);
-    this.indexService.updateSettings(this.settings);
-    this.personResearch.updateSettings(this.settings);
-    this.orgResearch.updateSettings(this.settings);
-    this.dailyNote.updateSettings(this.settings);
-    this.meetingBriefing.updateSettings(this.settings);
-    this.feedback.updateSettings(this.settings);
-    this.inbox.updateSettings(this.settings);
-    this.llmCouncil.updateSettings(this.settings);
-    this.amieTranscript.updateSettings(this.settings);
-    this.o3Prep.updateSettings(this.settings);
-    this.o3Coach.updateSettings(this.settings);
-    this.webhookServer.updateSettings(this.settings);
+    // Notify all registered components of settings change
+    for (const subscriber of this.settingsSubscribers) {
+      subscriber.updateSettings(this.settings);
+    }
   }
 
   getAIService(): AIService {
