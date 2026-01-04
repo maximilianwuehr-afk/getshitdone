@@ -1,0 +1,22 @@
+# Build output
+main.js
+
+# Dependencies
+node_modules/
+
+# Auto-generated (from prompts/*.md)
+src/prompts.ts
+
+# IDE
+.idea/
+*.swp
+*.swo
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# npm
+package-lock.json
+*.log

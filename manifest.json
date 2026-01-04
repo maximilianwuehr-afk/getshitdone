@@ -1,0 +1,12 @@
+{
+  "id": "getshitdone",
+  "name": "GetShitDone",
+  "version": "1.0.0",
+  "minAppVersion": "1.0.0",
+  "description": "AI-powered research assistant for meetings, people, and organizations",
+  "author": "Maximilian Wühr",
+  "authorUrl": "",
+  "isDesktopOnly": false
+}
+
+
