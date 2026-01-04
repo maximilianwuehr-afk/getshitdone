@@ -1246,39 +1246,21 @@ Return only the ${takeawaysCount} bullet points, one per line, without numbers o
 
   /**
    * Append the inbox item to its destination
+   * Uses fallback strategy: today → yesterday → latest available Daily Note
    */
   private async appendToDestination(item: InboxItem, decision: InboxRouteDecision): Promise<void> {
-    const retryDelaysMs = [0, 500, 2000];
-    let lastError: unknown = null;
-
-    for (let attempt = 0; attempt < retryDelaysMs.length; attempt++) {
-      if (retryDelaysMs[attempt] > 0) {
-        await this.sleep(retryDelaysMs[attempt]);
-      }
-
-      try {
-        await this.appendToDestinationOnce(item, decision);
-        return;
-      } catch (error: unknown) {
-        lastError = error;
-        if (!(error instanceof DailyNoteNotReadyError)) {
-          throw error;
-        }
-      }
-    }
-
-    throw lastError ?? new DailyNoteNotReadyError("Could not find today's daily note");
+    await this.appendToDestinationOnce(item, decision);
   }
 
   private async appendToDestinationOnce(item: InboxItem, decision: InboxRouteDecision): Promise<void> {
     const dailyNotePath = await this.getDailyNotePath();
     if (!dailyNotePath) {
-      throw new DailyNoteNotReadyError("Could not find today's daily note");
+      throw new DailyNoteNotReadyError("Could not find any daily note (tried today, yesterday, and latest)");
     }
 
     const file = this.app.vault.getAbstractFileByPath(dailyNotePath);
     if (!file || !(file instanceof TFile)) {
-      throw new DailyNoteNotReadyError("Daily note not found");
+      throw new DailyNoteNotReadyError("Daily note file could not be accessed");
     }
 
     const content = await this.app.vault.read(file);
@@ -1498,15 +1480,46 @@ Return only the ${takeawaysCount} bullet points, one per line, without numbers o
   }
 
   /**
-   * Get today's daily note path
+   * Get a daily note path with fallback strategy:
+   * 1. Try today's Daily Note
+   * 2. If not found, try yesterday's Daily Note
+   * 3. If not found, find the latest Daily Note in the vault
    */
   private async getDailyNotePath(): Promise<string | null> {
+    // Try today first
     const today = moment().format("YYYY-MM-DD");
+    const todayPath = this.findDailyNoteByDate(today);
+    if (todayPath) {
+      return todayPath;
+    }
+
+    // Try yesterday
+    const yesterday = moment().subtract(1, "day").format("YYYY-MM-DD");
+    const yesterdayPath = this.findDailyNoteByDate(yesterday);
+    if (yesterdayPath) {
+      console.log(`[GSD Inbox] Today's daily note not found, falling back to yesterday: ${yesterdayPath}`);
+      return yesterdayPath;
+    }
+
+    // Find the latest Daily Note in the vault
+    const latestPath = this.findLatestDailyNote();
+    if (latestPath) {
+      console.log(`[GSD Inbox] No recent daily notes found, falling back to latest: ${latestPath}`);
+      return latestPath;
+    }
+
+    return null;
+  }
+
+  /**
+   * Find a daily note by date string (YYYY-MM-DD)
+   */
+  private findDailyNoteByDate(date: string): string | null {
     const possiblePaths = [
-      `Daily notes/${today}.md`,
-      `daily notes/${today}.md`,
-      `Daily Notes/${today}.md`,
-      `${today}.md`,
+      `Daily notes/${date}.md`,
+      `daily notes/${date}.md`,
+      `Daily Notes/${date}.md`,
+      `${date}.md`,
     ];
 
     for (const path of possiblePaths) {
@@ -1519,7 +1532,7 @@ Return only the ${takeawaysCount} bullet points, one per line, without numbers o
     // Try to find any file matching the date pattern
     const allFiles = this.app.vault.getMarkdownFiles();
     for (const file of allFiles) {
-      if (file.basename === today) {
+      if (file.basename === date) {
         return file.path;
       }
     }
@@ -1527,8 +1540,23 @@ Return only the ${takeawaysCount} bullet points, one per line, without numbers o
     return null;
   }
 
-  private async sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+  /**
+   * Find the latest daily note in the vault by scanning for YYYY-MM-DD pattern files
+   */
+  private findLatestDailyNote(): string | null {
+    const allFiles = this.app.vault.getMarkdownFiles();
+    const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+
+    // Filter files that match daily note naming pattern and sort by date descending
+    const dailyNotes = allFiles
+      .filter(file => datePattern.test(file.basename))
+      .sort((a, b) => b.basename.localeCompare(a.basename)); // Descending order (latest first)
+
+    if (dailyNotes.length > 0) {
+      return dailyNotes[0].path;
+    }
+
+    return null;
   }
 
   // ============================================================================
