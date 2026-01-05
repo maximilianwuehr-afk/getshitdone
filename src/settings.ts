@@ -37,6 +37,8 @@ export class GetShitDoneSettingTab extends PluginSettingTab {
   private openRouterSortDirection: "asc" | "desc" = "asc";
   private openLlmOrgIndex = new Map<string, Map<string, string>>();
   private openRouterSearchFocus: { start: number; end: number } | null = null;
+  private openLlmLastRequestAt = 0;
+  private openLlmBackoffUntil = 0;
 
   constructor(app: App, plugin: GetShitDonePlugin) {
     super(app, plugin);
@@ -799,6 +801,13 @@ export class GetShitDoneSettingTab extends PluginSettingTab {
     });
 
     for (const model of models) {
+      if (this.openLlmBackoffUntil && Date.now() < this.openLlmBackoffUntil) {
+        new Notice("Open LLM benchmark rate limited; try again later.");
+        break;
+      }
+      if (openLlmScores[model.id] != null) {
+        continue;
+      }
       const openLlmScore = await this.fetchOpenLlmScore(model);
       if (openLlmScore != null) {
         openLlmScores[model.id] = openLlmScore;
@@ -820,6 +829,55 @@ export class GetShitDoneSettingTab extends PluginSettingTab {
 
   private stripHtmlTags(value: string): string {
     return value.replace(/<[^>]*>/g, "");
+  }
+
+  private async sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => window.setTimeout(resolve, ms));
+  }
+
+  private async rateLimitOpenLlm(): Promise<void> {
+    const now = Date.now();
+    const minDelayMs = 700;
+    const waitFor = Math.max(0, this.openLlmLastRequestAt + minDelayMs - now);
+    if (waitFor > 0) {
+      await this.sleep(waitFor);
+    }
+    this.openLlmLastRequestAt = Date.now();
+  }
+
+  private async requestOpenLlm(
+    options: { url: string; method: "GET" },
+    label: string
+  ): Promise<RequestUrlResponse | null> {
+    if (this.openLlmBackoffUntil && Date.now() < this.openLlmBackoffUntil) {
+      return null;
+    }
+
+    const maxRetries = 2;
+    for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+      try {
+        await this.rateLimitOpenLlm();
+        const response = await requestUrl(options) as RequestUrlResponse;
+        if (response.status === 429) {
+          this.openLlmBackoffUntil = Date.now() + 60_000;
+          await this.sleep(2000 * (attempt + 1));
+          continue;
+        }
+        return response;
+      } catch (error) {
+        const status = (error as { status?: number }).status;
+        const message = error instanceof Error ? error.message : String(error);
+        if (status === 429 || message.includes("status 429")) {
+          this.openLlmBackoffUntil = Date.now() + 60_000;
+          await this.sleep(2000 * (attempt + 1));
+          continue;
+        }
+        console.warn(`[GSD] Failed to fetch Open LLM benchmark (${label})`, error);
+        return null;
+      }
+    }
+
+    return null;
   }
 
   private getArenaKeyVariants(value: string): string[] {
@@ -872,29 +930,22 @@ export class GetShitDoneSettingTab extends PluginSettingTab {
   }
 
   private async fetchOpenLlmResultFiles(path: string): Promise<string[] | null> {
-    try {
-      const treeResponse = await requestUrl({
+    const treeResponse = await this.requestOpenLlm(
+      {
         url: `https://huggingface.co/api/datasets/open-llm-leaderboard/results/tree/main/${this.encodePath(path)}`,
         method: "GET",
-      }) as RequestUrlResponse;
+      },
+      "tree"
+    );
 
-      if (treeResponse.status !== 200) {
-        return null;
-      }
-
-      const files = treeResponse.json as Array<{ path?: string }>;
-      return files
-        .map((file) => file.path)
-        .filter((entry): entry is string => Boolean(entry) && entry.includes("results_") && entry.endsWith(".json"));
-    } catch (error) {
-      const status = (error as { status?: number }).status;
-      const message = error instanceof Error ? error.message : String(error);
-      if (status === 404 || message.includes("status 404")) {
-        return null;
-      }
-      console.warn("[GSD] Failed to fetch Open LLM benchmark", error);
+    if (!treeResponse || treeResponse.status !== 200) {
       return null;
     }
+
+    const files = treeResponse.json as Array<{ path?: string }>;
+    return files
+      .map((file) => file.path)
+      .filter((entry): entry is string => Boolean(entry) && entry.includes("results_") && entry.endsWith(".json"));
   }
 
   private async getOpenLlmOrgIndex(org: string): Promise<Map<string, string> | null> {
@@ -902,37 +953,30 @@ export class GetShitDoneSettingTab extends PluginSettingTab {
       return this.openLlmOrgIndex.get(org) ?? null;
     }
 
-    try {
-      const response = await requestUrl({
+    const response = await this.requestOpenLlm(
+      {
         url: `https://huggingface.co/api/datasets/open-llm-leaderboard/results/tree/main/${this.encodePath(org)}`,
         method: "GET",
-      }) as RequestUrlResponse;
+      },
+      "org-index"
+    );
 
-      if (response.status !== 200) {
-        return null;
-      }
-
-      const entries = response.json as Array<{ path?: string; type?: string }>;
-      const index = new Map<string, string>();
-      entries.forEach((entry) => {
-        if (entry.type !== "directory") return;
-        const path = entry.path;
-        if (!path) return;
-        const leaf = path.split("/").pop() ?? path;
-        index.set(this.normalizeBenchmarkKey(leaf), path);
-      });
-
-      this.openLlmOrgIndex.set(org, index);
-      return index;
-    } catch (error) {
-      const status = (error as { status?: number }).status;
-      const message = error instanceof Error ? error.message : String(error);
-      if (status === 404 || message.includes("status 404")) {
-        return null;
-      }
-      console.warn("[GSD] Failed to fetch Open LLM benchmark index", error);
+    if (!response || response.status !== 200) {
       return null;
     }
+
+    const entries = response.json as Array<{ path?: string; type?: string }>;
+    const index = new Map<string, string>();
+    entries.forEach((entry) => {
+      if (entry.type !== "directory") return;
+      const path = entry.path;
+      if (!path) return;
+      const leaf = path.split("/").pop() ?? path;
+      index.set(this.normalizeBenchmarkKey(leaf), path);
+    });
+
+    this.openLlmOrgIndex.set(org, index);
+    return index;
   }
 
   private async resolveOpenLlmPath(candidateId: string): Promise<string | null> {
@@ -1010,12 +1054,19 @@ export class GetShitDoneSettingTab extends PluginSettingTab {
   }
 
   private async fetchOpenLlmScore(model: OpenRouterModel): Promise<number | null> {
+    if (this.openLlmBackoffUntil && Date.now() < this.openLlmBackoffUntil) {
+      return null;
+    }
+
     const candidates = Array.from(new Set(
       [model.hugging_face_id, model.canonical_slug, model.id]
         .filter((value): value is string => Boolean(value) && value.includes("/"))
     ));
 
     for (const candidate of candidates) {
+      if (this.openLlmBackoffUntil && Date.now() < this.openLlmBackoffUntil) {
+        return null;
+      }
       const directFiles = await this.fetchOpenLlmResultFiles(candidate);
       const files = directFiles?.length ? directFiles : null;
       const resolved = files ? null : await this.resolveOpenLlmPath(candidate);
@@ -1027,33 +1078,26 @@ export class GetShitDoneSettingTab extends PluginSettingTab {
       const latestPath = resultFiles.sort().at(-1);
       if (!latestPath) continue;
 
-      try {
-        const resultResponse = await requestUrl({
+      const resultResponse = await this.requestOpenLlm(
+        {
           url: `https://huggingface.co/datasets/open-llm-leaderboard/results/resolve/main/${this.encodePath(latestPath)}`,
           method: "GET",
-        }) as RequestUrlResponse;
+        },
+        "results"
+      );
 
-        if (resultResponse.status !== 200) {
-          continue;
-        }
-
-        const data = resultResponse.json as { results?: Record<string, Record<string, unknown>> };
-        const leaderboard = data?.results?.leaderboard ?? {};
-        const accNorm = leaderboard["acc_norm,none"];
-        const acc = leaderboard["acc,none"];
-        const value = typeof accNorm === "number" ? accNorm : typeof acc === "number" ? acc : null;
-        if (value == null) continue;
-
-        return Math.round(value * 1000) / 10;
-      } catch (error) {
-        const status = (error as { status?: number }).status;
-        const message = error instanceof Error ? error.message : String(error);
-        if (status === 404 || message.includes("status 404")) {
-          continue;
-        }
-        console.warn("[GSD] Failed to fetch Open LLM benchmark", error);
+      if (!resultResponse || resultResponse.status !== 200) {
         continue;
       }
+
+      const data = resultResponse.json as { results?: Record<string, Record<string, unknown>> };
+      const leaderboard = data?.results?.leaderboard ?? {};
+      const accNorm = leaderboard["acc_norm,none"];
+      const acc = leaderboard["acc,none"];
+      const value = typeof accNorm === "number" ? accNorm : typeof acc === "number" ? acc : null;
+      if (value == null) continue;
+
+      return Math.round(value * 1000) / 10;
     }
 
     return null;
