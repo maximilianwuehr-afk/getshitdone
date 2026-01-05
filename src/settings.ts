@@ -624,6 +624,7 @@ export class GetShitDoneSettingTab extends PluginSettingTab {
     const bench = this.plugin.settings.openrouter.benchmarks ?? {
       arenaScores: {},
       openLlmScores: {},
+      openLlmFetched: {},
       lastFetched: null,
     };
 
@@ -733,6 +734,7 @@ export class GetShitDoneSettingTab extends PluginSettingTab {
     const bench = this.plugin.settings.openrouter.benchmarks ?? {
       arenaScores: {},
       openLlmScores: {},
+      openLlmFetched: {},
       lastFetched: null,
     };
     const arenaScore = bench.arenaScores[model.id];
@@ -755,6 +757,7 @@ export class GetShitDoneSettingTab extends PluginSettingTab {
     bench = this.plugin.settings.openrouter.benchmarks ?? {
       arenaScores: {},
       openLlmScores: {},
+      openLlmFetched: {},
       lastFetched: null,
     }
   ): number | null {
@@ -792,6 +795,15 @@ export class GetShitDoneSettingTab extends PluginSettingTab {
     const arenaMap = await this.fetchArenaScores();
     const arenaScores = { ...this.plugin.settings.openrouter.benchmarks.arenaScores };
     const openLlmScores = { ...this.plugin.settings.openrouter.benchmarks.openLlmScores };
+    const openLlmFetched = {
+      ...(this.plugin.settings.openrouter.benchmarks.openLlmFetched ?? {}),
+    };
+    const fallbackFetched = this.plugin.settings.openrouter.benchmarks.lastFetched;
+    Object.keys(openLlmScores).forEach((id) => {
+      if (!openLlmFetched[id]) {
+        openLlmFetched[id] = fallbackFetched ?? new Date().toISOString();
+      }
+    });
 
     models.forEach((model) => {
       const arenaScore = this.matchArenaScore(model, arenaMap);
@@ -805,10 +817,17 @@ export class GetShitDoneSettingTab extends PluginSettingTab {
         new Notice("Open LLM benchmark rate limited; try again later.");
         break;
       }
-      if (openLlmScores[model.id] != null) {
+      if (openLlmFetched[model.id]) {
         continue;
       }
-      const openLlmScore = await this.fetchOpenLlmScore(model);
+      if (openLlmScores[model.id] != null) {
+        openLlmFetched[model.id] = new Date().toISOString();
+        continue;
+      }
+      const { score: openLlmScore, fetched } = await this.fetchOpenLlmScore(model);
+      if (fetched) {
+        openLlmFetched[model.id] = new Date().toISOString();
+      }
       if (openLlmScore != null) {
         openLlmScores[model.id] = openLlmScore;
       }
@@ -817,6 +836,7 @@ export class GetShitDoneSettingTab extends PluginSettingTab {
     this.plugin.settings.openrouter.benchmarks = {
       arenaScores,
       openLlmScores,
+      openLlmFetched,
       lastFetched: new Date().toISOString(),
     };
     await this.plugin.saveSettings();
@@ -1053,24 +1073,38 @@ export class GetShitDoneSettingTab extends PluginSettingTab {
     return arenaMap;
   }
 
-  private async fetchOpenLlmScore(model: OpenRouterModel): Promise<number | null> {
+  private async fetchOpenLlmScore(
+    model: OpenRouterModel
+  ): Promise<{ score: number | null; fetched: boolean }> {
     if (this.openLlmBackoffUntil && Date.now() < this.openLlmBackoffUntil) {
-      return null;
+      return { score: null, fetched: false };
     }
 
     const candidates = Array.from(new Set(
       [model.hugging_face_id, model.canonical_slug, model.id]
         .filter((value): value is string => Boolean(value) && value.includes("/"))
     ));
+    if (candidates.length === 0) {
+      return { score: null, fetched: true };
+    }
 
     for (const candidate of candidates) {
       if (this.openLlmBackoffUntil && Date.now() < this.openLlmBackoffUntil) {
-        return null;
+        return { score: null, fetched: false };
       }
       const directFiles = await this.fetchOpenLlmResultFiles(candidate);
+      if (this.openLlmBackoffUntil && Date.now() < this.openLlmBackoffUntil) {
+        return { score: null, fetched: false };
+      }
       const files = directFiles?.length ? directFiles : null;
       const resolved = files ? null : await this.resolveOpenLlmPath(candidate);
+      if (this.openLlmBackoffUntil && Date.now() < this.openLlmBackoffUntil) {
+        return { score: null, fetched: false };
+      }
       const resolvedFiles = !files && resolved ? await this.fetchOpenLlmResultFiles(resolved) : null;
+      if (this.openLlmBackoffUntil && Date.now() < this.openLlmBackoffUntil) {
+        return { score: null, fetched: false };
+      }
       const resultFiles = files ?? resolvedFiles ?? [];
 
       if (!resultFiles.length) continue;
@@ -1087,6 +1121,9 @@ export class GetShitDoneSettingTab extends PluginSettingTab {
       );
 
       if (!resultResponse || resultResponse.status !== 200) {
+        if (this.openLlmBackoffUntil && Date.now() < this.openLlmBackoffUntil) {
+          return { score: null, fetched: false };
+        }
         continue;
       }
 
@@ -1097,10 +1134,10 @@ export class GetShitDoneSettingTab extends PluginSettingTab {
       const value = typeof accNorm === "number" ? accNorm : typeof acc === "number" ? acc : null;
       if (value == null) continue;
 
-      return Math.round(value * 1000) / 10;
+      return { score: Math.round(value * 1000) / 10, fetched: true };
     }
 
-    return null;
+    return { score: null, fetched: true };
   }
 
   private encodePath(path: string): string {

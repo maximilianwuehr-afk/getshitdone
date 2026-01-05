@@ -161,6 +161,7 @@ export interface OpenRouterSettings {
   benchmarks: {
     arenaScores: Record<string, number>;
     openLlmScores: Record<string, number>;
+    openLlmFetched: Record<string, string>;
     lastFetched: string | null;
   };
 }
@@ -764,6 +765,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
     benchmarks: {
       arenaScores: {},
       openLlmScores: {},
+      openLlmFetched: {},
       lastFetched: null,
     },
   },
