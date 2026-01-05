@@ -72,7 +72,8 @@ export class ReferenceAction {
    * Returns array of matched topic paths using AI
    */
   async matchTopicsForContent(title: string, summary: string): Promise<string[]> {
-    return this.matchTopicsWithAI(title, summary);
+    const topics = await this.loadTopicHierarchy();
+    return this.matchTopics(summary, title, topics);
   }
 
   /**
@@ -122,7 +123,7 @@ export class ReferenceAction {
 
       // Step 4: Load topic hierarchy and match
       const topics = await this.loadTopicHierarchy();
-      const tags = this.matchTopics(summary, title, topics);
+      const tags = await this.matchTopics(summary, title, topics);
 
       // Step 5: Detect entity mentions
       const combinedText = `${title} ${summary}`;
@@ -175,11 +176,27 @@ export class ReferenceAction {
     }
 
     try {
-      return await api.summarizeUrl(url, { length: "short" });
+      return await api.summarizeUrl(url, {
+        length: "short",
+        prompt: this.buildReferenceSummaryPrompt(),
+      });
     } catch (error: unknown) {
       console.error("[GSD Reference] Summarization failed:", error);
       return null;
     }
+  }
+
+  private buildReferenceSummaryPrompt(): string {
+    return `Summarize the following content in approximately {{wordCount}} words. {{language}}
+
+Requirements:
+- If the content includes an author/byline, mention the author in the first sentence (e.g., "By NAME — ...").
+- If the content includes a concrete idea or suggestion to implement, call it out explicitly.
+- Do not invent an author; omit if unknown.
+- Avoid meta-commentary; start directly with the summary.
+
+Content to summarize:
+{{content}}`;
   }
 
   /**
@@ -320,6 +337,22 @@ export class ReferenceAction {
   }
 
   /**
+   * Match content against topic hierarchy using AI + evidence filter
+   */
+  private async matchTopics(
+    summary: string,
+    title: string,
+    topics: TopicHierarchy
+  ): Promise<string[]> {
+    const tags = await this.matchTopicsWithAI(title, summary);
+    if (!topics || Object.keys(topics).length === 0) {
+      return tags;
+    }
+
+    return this.filterTagsByEvidence(tags, title, summary, topics);
+  }
+
+  /**
    * Match content against topic hierarchy using AI
    * Returns array of tag paths (e.g., ["ai/agents", "leadership/urgency"])
    */
@@ -345,9 +378,11 @@ Summary: ${summary}
 - Return ONLY the relevant topic paths as a comma-separated list
 - Use the exact paths from the hierarchy (e.g., "ai/agents", "leadership/urgency")
 - Only return topics that are clearly relevant to the content
-- Be conservative - only tag if confident
+- Be conservative - only tag if the topic is explicitly central to the title/summary
+- Do NOT infer from weak associations, author/company names, or generic overlap
+- If you cannot point to a concrete phrase in the title/summary that supports a tag, do not include it
 - If nothing matches well, return "uncategorized"
-- Return 1-3 tags maximum
+- Prefer fewer tags (0-2 is normal). Only return 3 if unmistakably central
 - Do NOT include the # symbol
 
 ## Response Format
@@ -386,6 +421,121 @@ Return only the comma-separated tags, nothing else. Example: ai/agents, leadersh
       console.error("[GSD Reference] AI tagging failed:", error);
       return ["uncategorized"];
     }
+  }
+
+  private filterTagsByEvidence(
+    tags: string[],
+    title: string,
+    summary: string,
+    topics: TopicHierarchy
+  ): string[] {
+    const cleaned = tags.filter(tag => tag && tag !== "uncategorized");
+    if (cleaned.length === 0) {
+      return ["uncategorized"];
+    }
+
+    const aliasMap = this.buildTagAliasMap(topics);
+    const normalizedContent = this.normalizeForTagMatch(`${title} ${summary}`);
+
+    const kept = cleaned.filter(tag => {
+      const aliases = aliasMap.get(tag);
+      if (!aliases || aliases.length === 0) return false;
+      return aliases.some(alias => this.contentHasAlias(normalizedContent, alias));
+    });
+
+    if (kept.length === 0) {
+      return ["uncategorized"];
+    }
+
+    if (kept.length !== cleaned.length) {
+      console.log(
+        `[GSD Reference] Filtered tags by evidence. Before: ${cleaned.join(", ")} After: ${kept.join(", ")}`
+      );
+    }
+
+    return kept;
+  }
+
+  private buildTagAliasMap(topics: TopicHierarchy): Map<string, string[]> {
+    const map = new Map<string, string[]>();
+
+    const visitNode = (
+      node: TopicNode | string[] | undefined,
+      path: string,
+      inheritedAliases: string[]
+    ): void => {
+      if (!path) return;
+
+      if (!node) {
+        map.set(path, this.dedupeAliases([...inheritedAliases, ...this.getPathAliases(path)]));
+        return;
+      }
+
+      if (Array.isArray(node)) {
+        map.set(
+          path,
+          this.dedupeAliases([...inheritedAliases, ...this.getPathAliases(path), ...node])
+        );
+        return;
+      }
+
+      const nodeAliases = Array.isArray(node._aliases) ? node._aliases : [];
+      const combinedAliases = [...inheritedAliases, ...nodeAliases, ...this.getPathAliases(path)];
+      map.set(path, this.dedupeAliases(combinedAliases));
+
+      for (const [key, value] of Object.entries(node)) {
+        if (key === "_aliases") continue;
+        const childPath = `${path}/${key}`;
+        const childInherited = [...inheritedAliases, ...nodeAliases, key];
+        visitNode(value as TopicNode | string[] | undefined, childPath, childInherited);
+      }
+    };
+
+    for (const [key, value] of Object.entries(topics)) {
+      visitNode(value as TopicNode | string[] | undefined, key, [key]);
+    }
+
+    return map;
+  }
+
+  private getPathAliases(path: string): string[] {
+    const parts = path.split("/").filter(Boolean);
+    if (parts.length === 0) return [];
+    const aliases = [...parts];
+    if (parts.length > 1) {
+      aliases.push(parts.join(" "));
+    }
+    return aliases;
+  }
+
+  private normalizeForTagMatch(text: string): string {
+    return text
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  private contentHasAlias(normalizedContent: string, alias: string): boolean {
+    const normalizedAlias = this.normalizeForTagMatch(alias);
+    if (!normalizedAlias) return false;
+    return ` ${normalizedContent} `.includes(` ${normalizedAlias} `);
+  }
+
+  private dedupeAliases(aliases: string[]): string[] {
+    const seen = new Set<string>();
+    const cleaned: string[] = [];
+
+    for (const alias of aliases) {
+      const trimmed = alias.trim();
+      if (!trimmed) continue;
+      const key = trimmed.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      cleaned.push(trimmed);
+    }
+
+    return cleaned;
   }
 
   /**

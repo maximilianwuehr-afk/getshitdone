@@ -1238,6 +1238,12 @@ Provide a well-structured research summary.`;
           // Combined prompt: summarize + categorize in one call
           const customPrompt = `Summarize this content in {{wordCount}} words. {{language}}
 
+Requirements for Summary:
+- If the content includes an author/byline, mention the author in the first sentence (e.g., "By NAME — ...").
+- If the content includes a concrete idea or suggestion to implement, call it out explicitly.
+- Do not invent an author; omit if unknown.
+- Avoid meta-commentary; start directly with the summary.
+
 After the summary, on a NEW LINE, output topic tags from the hierarchy below.
 
 ## Topic Hierarchy
@@ -1246,7 +1252,9 @@ ${topicsContent}
 ## Instructions for Tags
 - Output tags on the LAST LINE in format: TAGS: tag1, tag2
 - Use exact paths from hierarchy (e.g., ai/agents, leadership/urgency)
-- Only include clearly relevant tags (1-3 max)
+- Only include tags that are explicitly central to the content
+- Do NOT infer from weak associations or generic overlap
+- Prefer fewer tags (0-2 is normal); only use 3 if unmistakably central
 - If nothing matches, use: TAGS: uncategorized
 
 ## Content to Summarize
