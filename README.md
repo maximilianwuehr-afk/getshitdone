@@ -1,16 +1,31 @@
 # GetShitDone Plugin
 
-AI-powered research assistant and productivity plugin for Obsidian. Automates research, meeting briefings, and content routing using multiple AI providers (Gemini, OpenAI, Anthropic).
+AI-powered research assistant and productivity plugin for Obsidian. Automates research, meeting briefings, 1:1 (O3) preparation, and content routing using multiple AI providers.
 
 ## Features
 
+### Research & Intelligence
 - **Person Research**: Automatically research people and update their notes with titles, organizations, locations, and research summaries
 - **Organization Research**: Deep research on companies with AUM, fund sizes, key people, and portfolio companies
+- **Reference System**: Save URLs as structured reference notes with AI-powered topic tagging, entity linking, and source detection
+
+### Meeting Preparation
 - **Meeting Briefings**: Generate AI-powered briefings for meetings using vault context, attachments, and web search
 - **Daily Notes**: Auto-generate daily meeting lists with briefings
+- **O3 Dashboard**: Visual dashboard for preparing 1:1 meetings with your direct reports
+- **O3 Coach**: AI-powered coaching that analyzes meeting history, daily notes, and performance reviews to suggest discussion topics
+- **O3 Prep**: Generate structured prep documents for each person with follow-ups, updates, and feedback sections
+
+### Content Management
 - **Inbox Processing**: Smart routing of captured content (tasks, thoughts, references) with trigger phrase detection
-- **Multi-Provider AI**: Support for Gemini, OpenAI (GPT-4o, GPT-5, o1/o3), and Anthropic (Claude) models
-- **Web Search Integration**: Built-in web search for real-time information gathering
+- **Tag and Link**: AI-powered topic tagging and entity linking for selected text or entire notes
+- **LLM Council**: Multi-model deliberation system with ideators, executors, and a judge for complex decisions
+
+### AI Infrastructure
+- **Multi-Provider AI**: Support for Gemini, OpenAI (GPT-4o, GPT-5, o1/o3), Anthropic (Claude), and OpenRouter
+- **OpenRouter Integration**: Access 100+ models with automatic free-tier fallback and benchmark-based ranking
+- **Web Search Integration**: Built-in web search across all providers for real-time information gathering
+- **Webhook Server**: HTTP endpoint for external integrations (e.g., Amie meeting transcripts)
 
 ## Architecture
 
@@ -46,13 +61,14 @@ flowchart TD
         Command[Obsidian Commands]
         FileOpen[File Open Event]
         AdvURI[Advanced URI]
+        Webhook[Webhook Server]
     end
-    
+
     subgraph plugin [Plugin Core]
         Main[main.ts]
         Settings[settings.ts]
     end
-    
+
     subgraph actions [Actions]
         DailyNote[DailyNoteAction]
         PersonRes[PersonResearchAction]
@@ -60,38 +76,51 @@ flowchart TD
         Briefing[MeetingBriefingAction]
         Inbox[InboxAction]
         Feedback[FeedbackAction]
+        O3Prep[O3PrepAction]
+        O3Coach[O3CoachAction]
+        LlmCouncil[LlmCouncilAction]
+        Reference[ReferenceAction]
     end
-    
+
+    subgraph views [Views]
+        O3Dashboard[O3 Dashboard]
+    end
+
     subgraph services [Services]
         AIService[AIService]
         Google[GoogleServices]
         Calendar[CalendarService]
         VaultSearch[VaultSearchService]
         Index[IndexService]
+        CouncilRunner[CouncilRunnerService]
     end
-    
+
     subgraph providers [AI Providers]
         Gemini[GeminiProvider]
         OpenAI[OpenAIProvider]
         Anthropic[AnthropicProvider]
+        OpenRouter[OpenRouterProvider]
     end
-    
+
     subgraph external [External APIs]
         GeminiAPI[Google Gemini API]
         OpenAIAPI[OpenAI API]
         AnthropicAPI[Anthropic API]
+        OpenRouterAPI[OpenRouter API]
         Gmail[Gmail via Apps Script]
         CalendarAPI[Google Calendar Plugin]
     end
-    
+
     triggers --> Main
     Main --> actions
+    Main --> views
     actions --> services
     AIService --> providers
     providers --> external
     Google --> Gmail
     Calendar --> CalendarAPI
     VaultSearch --> Index
+    LlmCouncil --> CouncilRunner
 ```
 
 ## Key Components
@@ -106,23 +135,36 @@ Actions are the main feature handlers that orchestrate workflows:
 - **`DailyNoteAction`**: Generates daily meeting lists, triggers briefings
 - **`InboxAction`**: Processes inbox items, routes content, handles trigger phrases
 - **`FeedbackAction`**: Collects and manages user feedback for prompt improvement
+- **`O3PrepAction`**: Prepares 1:1 meeting content by analyzing people notes, meetings, and O3 docs
+- **`O3CoachAction`**: AI coaching for O3s with source-cited suggestions and follow-up questions
+- **`LlmCouncilAction`**: Orchestrates multi-model deliberation (Ideators → Executors → Judge)
+- **`ReferenceAction`**: Processes URLs into structured reference notes with topic matching
+- **`AmieTranscriptAction`**: Handles meeting transcripts from Amie via webhooks
 
 ### Services (`src/services/`)
 
 Services provide reusable functionality:
 
 - **`AIService`**: Router that detects provider from model name and routes to appropriate provider
-- **`GeminiProvider`**: Implements `AIProvider` for Google Gemini models
+- **`GeminiProvider`**: Implements `AIProvider` for Google Gemini models with Google Search
 - **`OpenAIProvider`**: Implements `AIProvider` for OpenAI models (GPT-4o, GPT-5, o1/o3)
 - **`AnthropicProvider`**: Implements `AIProvider` for Anthropic Claude models
-- **`GoogleServices`**: Handles Gmail search and Google Docs reading via Apps Script
+- **`OpenRouterProvider`**: Implements `AIProvider` for OpenRouter with 100+ models and auto-free fallback
+- **`GoogleServices`**: Handles Gmail search and Google Docs reading/writing via Apps Script
 - **`CalendarService`**: Wrapper for Google Calendar plugin integration
 - **`VaultSearchService`**: Searches vault, parses frontmatter, finds related notes
-- **`IndexService`**: Maintains in-memory index for fast lookups
+- **`IndexService`**: Maintains in-memory indexes for people, orgs, meetings, and O3 relationships
+- **`CouncilRunnerService`**: Executes the LLM Council pipeline (ideators, executors, judge)
+- **`WebhookServer`**: HTTP server for external integrations (configurable port and API key)
+
+### Views (`src/views/`)
+
+- **`O3DashboardView`**: Interactive dashboard for O3 preparation with person cards, source toggles, and coach chat
 
 ### Utilities (`src/utils/`)
 
 - **`error-handler.ts`**: Standardized error handling with logging and user notifications
+- **`deep-merge.ts`**: Deep merge utility for settings with defaults
 
 ### Types (`src/types.ts`)
 
@@ -224,15 +266,16 @@ interface AIProvider {
 The `AIService` automatically detects the provider from model name:
 - `claude-*` → AnthropicProvider
 - `gpt-*`, `o1-*`, `o3-*` → OpenAIProvider
-- `gemini-*` → GeminiProvider (default)
+- `gemini-*` → GeminiProvider
+- `openrouter:*`, or any model containing `/` → OpenRouterProvider
 
 ### Feature Mapping
 
-| Feature | Gemini | OpenAI | Anthropic |
-|---------|--------|--------|-----------|
-| Web Search | Google Search | `web_search` tool | `web_search_20250305` tool |
-| Reasoning Effort | `thinkingBudget` tokens | `reasoning.effort` (GPT-5) | `output_config.effort` (Opus 4.5) |
-| Verbosity | N/A | `verbosity: "low"` (GPT-5) | N/A |
+| Feature | Gemini | OpenAI | Anthropic | OpenRouter |
+|---------|--------|--------|-----------|------------|
+| Web Search | Google Search | `web_search` tool | `web_search_20250305` tool | `tools: [web_search]` (model-dependent) |
+| Reasoning Effort | `thinkingBudget` tokens | `reasoning.effort` (GPT-5) | `output_config.effort` (Opus 4.5) | `reasoning.effort` (model-dependent) |
+| Auto-Free Fallback | N/A | N/A | N/A | Falls back through ranked free models |
 
 ## Configuration
 
@@ -242,14 +285,19 @@ The `AIService` automatically detects the provider from model name:
   - Gemini API Key (for Gemini models)
   - OpenAI API Key (for OpenAI models)
   - Anthropic API Key (for Claude models)
+  - OpenRouter API Key (for OpenRouter models)
 
 ### Optional Settings
 
 - **Apps Script URL/Secret**: For Gmail and Google Docs access
-- **Folder Paths**: Customize People/, Organizations/, Meetings/ folders
+- **Folder Paths**: Customize People/, Organizations/, Meetings/, References/ folders
 - **Model Selection**: Choose models for each action type
 - **Generation Configs**: Temperature, reasoning effort per action
 - **Inbox Settings**: Trigger phrases, smart suggestions, routing rules
+- **O3 Settings**: Master note path, meeting title regex, lookback days
+- **Reference Settings**: Topics file path, source type detection, daily note linking
+- **Webhook Settings**: Enable/disable, port, API key for external integrations
+- **LLM Council Settings**: Enable/disable, ideator/executor/judge model selection
 
 ## Development
 
@@ -258,15 +306,16 @@ The `AIService` automatically detects the provider from model name:
 ```
 getshitdone/
 ├── src/
-│   ├── actions/          # Feature handlers
-│   ├── services/         # Reusable services
-│   ├── utils/            # Utility functions
-│   ├── main.ts           # Plugin entry point
-│   ├── settings.ts       # Settings UI
+│   ├── actions/          # Feature handlers (research, briefings, O3, council)
+│   ├── services/         # AI providers, Google services, indexing
+│   ├── views/            # Custom Obsidian views (O3 Dashboard)
+│   ├── utils/            # Error handling, deep merge
+│   ├── main.ts           # Plugin entry point, command registration
+│   ├── settings.ts       # Settings UI with tabs
 │   └── types.ts          # Type definitions
 ├── prompts/              # Prompt templates (markdown)
 ├── scripts/
-│   └── generate-prompts.js  # Auto-generates prompts.ts
+│   └── generate-prompts.js  # Auto-generates prompts.ts from markdown
 ├── package.json
 ├── tsconfig.json
 └── esbuild.config.mjs
@@ -298,14 +347,17 @@ The build process:
 
 ### Adding a New AI Provider
 
-1. Create `src/services/{provider}-provider.ts` implementing `AIProvider`
+1. Create `src/services/{provider}-provider.ts` implementing `AIProvider` interface
 2. Add provider to `AIService`:
    - Import provider
    - Add to constructor
    - Add to `updateSettings()`
-   - Update `detectProvider()` method
+   - Update `detectProvider()` method with model name patterns
    - Update `getProvider()` method
-3. Add API key setting in `types.ts` and `settings.ts`
+3. Add API key setting in `types.ts` (in `PluginSettings`) and `settings.ts` (in settings UI)
+4. Update the feature mapping table in this README
+
+See `openrouter-provider.ts` for a complete example with retry logic and model caching.
 
 ### Error Handling
 
@@ -325,6 +377,26 @@ try {
 }
 ```
 
+## Commands
+
+The plugin registers these Obsidian commands:
+
+| Command | Description | Context |
+|---------|-------------|---------|
+| Research Person | Research the current person note | People folder |
+| Research Organization | Research the current org note | Organizations folder |
+| Re-research (Force) | Force re-research ignoring cache | People/Orgs folder |
+| Generate Briefing for Current Line | Generate meeting briefing | Any note |
+| Find Phone Number | Search Gmail for phone number | People folder |
+| Report Research Issue | Add feedback for prompt improvement | People/Orgs/Daily |
+| Show Index Statistics | Display index counts | Global |
+| Rebuild Search Index | Rebuild all indexes | Global |
+| Inbox: Capture from Clipboard | Process clipboard content | Global |
+| Run LLM Council | Run multi-model deliberation | Any note |
+| Open O3 Dashboard | Open the O3 prep dashboard | Global |
+| Save Reference from Clipboard | Save URL as reference note | Global |
+| Tag and Link Selection/Note | Add topic tags and entity links | Editor |
+
 ## Prompt Management
 
 Prompts are stored as markdown files in `prompts/` and auto-generated into `src/prompts.ts`:
@@ -337,6 +409,46 @@ Prompts are stored as markdown files in `prompts/` and auto-generated into `src/
 - `research.md` - Deep research with web search
 
 Edit prompts in markdown, then rebuild to update.
+
+## Templater API
+
+The plugin exposes an API for use with Templater:
+
+```javascript
+// Get the plugin API
+const gsd = app.plugins.plugins["getshitdone"].api;
+
+// Generate daily note meeting list
+await gsd.generateDailyNote(tp);
+
+// Research the current person note
+await gsd.researchPerson(tp);
+
+// Research the current organization note
+await gsd.researchOrg(tp);
+
+// Capture content to inbox
+await gsd.captureToInbox("My note content", "TASK");
+
+// Run LLM Council on current note
+await gsd.runCouncil();
+
+// Save a URL as a reference note
+await gsd.saveReference("https://example.com/article");
+```
+
+## URI Handler
+
+The plugin registers a URI handler for inbox captures:
+
+```
+obsidian://gsd-inbox?content=...&type=...&source=...
+```
+
+Parameters:
+- `content`: The text to process (URL encoded)
+- `type`: Optional type hint (TASK, THOUGHT, REFERENCE)
+- `source`: Source identifier (e.g., "ios-shortcut")
 
 ## Dependencies
 
