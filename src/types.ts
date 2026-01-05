@@ -22,6 +22,7 @@ export interface PluginSettings {
   geminiApiKey: string;
   openaiApiKey: string;
   anthropicApiKey: string;
+  openrouterApiKey: string;
   appsScriptUrl: string;
   appsScriptSecret: string;
 
@@ -68,6 +69,9 @@ export interface PluginSettings {
 
   // Webhook settings
   webhook: WebhookSettings;
+
+  // OpenRouter settings
+  openrouter: OpenRouterSettings;
 }
 
 export interface ModelSettings {
@@ -113,6 +117,52 @@ export interface WebhookSettings {
   port: number;
   apiKey: string;
   bindAddress: "127.0.0.1" | "0.0.0.0";
+}
+
+// ============================================================================
+// OpenRouter Types
+// ============================================================================
+
+export interface OpenRouterModelPricing {
+  prompt: number;
+  completion: number;
+  request?: number;
+  image?: number;
+  web_search?: number;
+  internal_reasoning?: number;
+}
+
+export interface OpenRouterModelArchitecture {
+  modality?: string;
+  input_modalities?: string[];
+  output_modalities?: string[];
+  tokenizer?: string;
+  instruct_type?: string | null;
+}
+
+export interface OpenRouterModel {
+  id: string;
+  canonical_slug?: string;
+  hugging_face_id?: string;
+  name: string;
+  description?: string;
+  context_length: number;
+  pricing: OpenRouterModelPricing;
+  supported_parameters?: string[];
+  per_request_limits?: Record<string, unknown> | null;
+  architecture?: OpenRouterModelArchitecture;
+}
+
+export interface OpenRouterSettings {
+  modelCache: OpenRouterModel[];
+  lastFetched: string | null;
+  selectedModels: string[];
+  freeModelRank: string[];
+  benchmarks: {
+    arenaScores: Record<string, number>;
+    openLlmScores: Record<string, number>;
+    lastFetched: string | null;
+  };
 }
 
 export interface AmieWebhookPayload {
@@ -400,6 +450,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   geminiApiKey: "",
   openaiApiKey: "",
   anthropicApiKey: "",
+  openrouterApiKey: "",
   appsScriptUrl: "",
   appsScriptSecret: "",
 
@@ -703,6 +754,18 @@ export const DEFAULT_SETTINGS: PluginSettings = {
     port: 3456,
     apiKey: "",
     bindAddress: "127.0.0.1",
+  },
+
+  openrouter: {
+    modelCache: [],
+    lastFetched: null,
+    selectedModels: [],
+    freeModelRank: [],
+    benchmarks: {
+      arenaScores: {},
+      openLlmScores: {},
+      lastFetched: null,
+    },
   },
 };
 

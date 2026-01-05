@@ -3,6 +3,7 @@ import type { AIProvider, AICallOptions } from "./ai-provider";
 import { GeminiProvider } from "./gemini-provider";
 import { OpenAIProvider } from "./openai-provider";
 import { AnthropicProvider } from "./anthropic-provider";
+import { OpenRouterProvider } from "./openrouter-provider";
 
 /**
  * AI Service
@@ -13,12 +14,14 @@ export class AIService {
   private geminiProvider: GeminiProvider;
   private openaiProvider: OpenAIProvider;
   private anthropicProvider: AnthropicProvider;
+  private openrouterProvider: OpenRouterProvider;
 
   constructor(settings: PluginSettings) {
     this.settings = settings;
     this.geminiProvider = new GeminiProvider(settings);
     this.openaiProvider = new OpenAIProvider(settings);
     this.anthropicProvider = new AnthropicProvider(settings);
+    this.openrouterProvider = new OpenRouterProvider(settings);
   }
 
   /**
@@ -29,15 +32,20 @@ export class AIService {
     this.geminiProvider.updateSettings(settings);
     this.openaiProvider.updateSettings(settings);
     this.anthropicProvider.updateSettings(settings);
+    this.openrouterProvider.updateSettings(settings);
   }
 
   /**
    * Detect provider from model name
    * @param model Model identifier
-   * @returns Provider type: "gemini" | "openai" | "anthropic"
+   * @returns Provider type: "gemini" | "openai" | "anthropic" | "openrouter"
    */
-  private detectProvider(model: string): "gemini" | "openai" | "anthropic" {
-    const modelLower = model.toLowerCase();
+  private detectProvider(model: string): "gemini" | "openai" | "anthropic" | "openrouter" {
+    const modelLower = model.toLowerCase().trim();
+
+    if (this.isOpenRouterModel(modelLower)) {
+      return "openrouter";
+    }
     
     // Anthropic models: claude-*
     if (modelLower.startsWith("claude-")) {
@@ -61,6 +69,19 @@ export class AIService {
     return "gemini";
   }
 
+  private isOpenRouterModel(modelLower: string): boolean {
+    if (modelLower.startsWith("openrouter:")) {
+      return true;
+    }
+    if (modelLower.includes("/")) {
+      return true;
+    }
+    if (this.settings.openrouter?.selectedModels?.length) {
+      return this.settings.openrouter.selectedModels.some((id) => id.toLowerCase() === modelLower);
+    }
+    return false;
+  }
+
   /**
    * Get the appropriate provider for a model
    */
@@ -68,6 +89,8 @@ export class AIService {
     const provider = this.detectProvider(model);
     if (provider === "openai") {
       return this.openaiProvider;
+    } else if (provider === "openrouter") {
+      return this.openrouterProvider;
     } else if (provider === "anthropic") {
       return this.anthropicProvider;
     } else {

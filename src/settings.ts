@@ -1,4 +1,4 @@
-import { App, PluginSettingTab, Setting, Notice, Modal, TextAreaComponent } from "obsidian";
+import { App, PluginSettingTab, Setting, Notice, Modal, TextAreaComponent, requestUrl, RequestUrlResponse } from "obsidian";
 import type GetShitDonePlugin from "./main";
 import {
   DEFAULT_SETTINGS,
@@ -7,11 +7,13 @@ import {
   InboxRoutingRule,
   InboxRouteDestination,
   InboxFormatStyle,
+  OpenRouterModel,
 } from "./types";
 import { GoogleServices } from "./services/google-services";
 import type { AIService } from "./services/ai-service";
 
-type SettingsTabId = "general" | "daily" | "api" | "inbox" | "ai" | "council";
+type SettingsTabId = "general" | "daily" | "api" | "inbox" | "ai" | "council" | "openrouter";
+type OpenRouterSortKey = "name" | "provider" | "context" | "cost" | "arena" | "openllm";
 
 type SettingsHelperOptions = {
   title: string;
@@ -27,6 +29,13 @@ type SettingsHelperOptions = {
 export class GetShitDoneSettingTab extends PluginSettingTab {
   plugin: GetShitDonePlugin;
   private activeTab: SettingsTabId = "general";
+  private openRouterSearch = "";
+  private openRouterProviderFilter = "all";
+  private openRouterFreeOnly = false;
+  private openRouterSelectedOnly = false;
+  private openRouterSort: OpenRouterSortKey = "name";
+  private openRouterSortDirection: "asc" | "desc" = "asc";
+  private openLlmOrgIndex = new Map<string, Map<string, string>>();
 
   constructor(app: App, plugin: GetShitDonePlugin) {
     super(app, plugin);
@@ -51,6 +60,9 @@ export class GetShitDoneSettingTab extends PluginSettingTab {
         break;
       case "api":
         this.renderApiTab(contentEl);
+        break;
+      case "openrouter":
+        this.renderOpenRouterTab(contentEl);
         break;
       case "inbox":
         this.renderInboxTab(contentEl);
@@ -105,6 +117,96 @@ export class GetShitDoneSettingTab extends PluginSettingTab {
       .gsd-settings-details-body {
         margin-top: 8px;
       }
+      .gsd-openrouter-toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin: 12px 0;
+        align-items: center;
+      }
+      .gsd-openrouter-toolbar input[type="text"] {
+        min-width: 220px;
+      }
+      .gsd-openrouter-meta {
+        font-size: 12px;
+        color: var(--text-muted);
+      }
+      .gsd-openrouter-table-wrap {
+        border: 1px solid var(--background-modifier-border);
+        border-radius: 10px;
+        background: var(--background-secondary);
+        overflow-x: auto;
+        margin-top: 12px;
+      }
+      .gsd-openrouter-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+      }
+      .gsd-openrouter-table th,
+      .gsd-openrouter-table td {
+        padding: 8px 10px;
+        border-bottom: 1px solid var(--background-modifier-border);
+        vertical-align: top;
+      }
+      .gsd-openrouter-table thead th {
+        text-align: left;
+        color: var(--text-muted);
+        font-weight: 600;
+        background: var(--background-secondary);
+        position: sticky;
+        top: 0;
+        z-index: 1;
+      }
+      .gsd-openrouter-table tbody tr.is-selected {
+        background: var(--background-modifier-hover);
+      }
+      .gsd-openrouter-row-title {
+        font-weight: 600;
+        font-size: 13px;
+      }
+      .gsd-openrouter-row-id {
+        font-family: var(--font-monospace);
+        font-size: 12px;
+        color: var(--text-muted);
+      }
+      .gsd-openrouter-table-actions {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+      .gsd-openrouter-table-meta {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .gsd-openrouter-rank-list {
+        display: grid;
+        gap: 8px;
+        margin-top: 8px;
+      }
+      .gsd-openrouter-rank-item {
+        border: 1px solid var(--background-modifier-border);
+        border-radius: 8px;
+        padding: 8px 10px;
+        background: var(--background-secondary);
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: center;
+      }
+      .gsd-openrouter-rank-item.is-dragging {
+        opacity: 0.6;
+      }
+      .gsd-openrouter-rank-item.is-drop-target {
+        border-color: var(--interactive-accent);
+      }
+      .gsd-openrouter-rank-handle {
+        font-size: 14px;
+        color: var(--text-muted);
+        cursor: grab;
+        margin-right: 6px;
+      }
     `;
     document.head.appendChild(style);
   }
@@ -114,6 +216,7 @@ export class GetShitDoneSettingTab extends PluginSettingTab {
       { id: "general", label: "General" },
       { id: "daily", label: "Daily notes" },
       { id: "api", label: "API & Integration" },
+      { id: "openrouter", label: "OpenRouter" },
       { id: "inbox", label: "Inbox" },
       { id: "ai", label: "AI models & prompts" },
       { id: "council", label: "LLM council" },
@@ -193,6 +296,800 @@ export class GetShitDoneSettingTab extends PluginSettingTab {
     this.renderDiagnostics(containerEl);
   }
 
+  private renderOpenRouterTab(containerEl: HTMLElement): void {
+    containerEl.createEl("p", {
+      text: "Browse and select OpenRouter models, then use their IDs in your workflow model fields.",
+      cls: "setting-item-description",
+    });
+
+    if (!this.plugin.settings.openrouterApiKey) {
+      containerEl.createEl("p", {
+        text: "Add an OpenRouter API key in the API & Integration tab to enable requests.",
+        cls: "setting-item-description",
+      });
+    }
+
+    const header = containerEl.createDiv({ cls: "gsd-openrouter-toolbar" });
+    const refreshButton = header.createEl("button", { text: "Refresh models" });
+    refreshButton.addEventListener("click", async () => {
+      refreshButton.setAttr("disabled", "true");
+      await this.fetchOpenRouterModels(true);
+      this.display();
+    });
+
+    const benchButton = header.createEl("button", { text: "Fetch benchmarks (visible)" });
+    benchButton.addEventListener("click", async () => {
+      benchButton.setAttr("disabled", "true");
+      const visibleModels = this.getOpenRouterVisibleModels();
+      await this.fetchOpenRouterBenchmarks(visibleModels);
+      this.display();
+    });
+
+    const benchSelectedButton = header.createEl("button", { text: "Fetch benchmarks (selected)" });
+    benchSelectedButton.addEventListener("click", async () => {
+      benchSelectedButton.setAttr("disabled", "true");
+      const selectedModels = this.getOpenRouterSelectedModels();
+      if (!selectedModels.length) {
+        new Notice("No OpenRouter models selected.");
+        benchSelectedButton.removeAttribute("disabled");
+        return;
+      }
+      await this.fetchOpenRouterBenchmarks(selectedModels);
+      this.display();
+    });
+
+    const lastFetched = this.plugin.settings.openrouter.lastFetched;
+    const lastFetchedText = lastFetched
+      ? `Last sync: ${new Date(lastFetched).toLocaleString()}`
+      : "No model cache yet";
+    header.createEl("span", { text: lastFetchedText, cls: "gsd-openrouter-meta" });
+
+    const benchFetched = this.plugin.settings.openrouter.benchmarks?.lastFetched ?? null;
+    const benchFetchedText = benchFetched
+      ? `Benchmarks: ${new Date(benchFetched).toLocaleString()}`
+      : "Benchmarks: not fetched";
+    header.createEl("span", { text: benchFetchedText, cls: "gsd-openrouter-meta" });
+
+    const models = this.plugin.settings.openrouter.modelCache;
+    if (!models.length) {
+      containerEl.createEl("p", {
+        text: "No models cached yet. Click \"Refresh models\" to load the latest list.",
+        cls: "setting-item-description",
+      });
+      return;
+    }
+
+    const providers = Array.from(
+      new Set(models.map((model) => this.getOpenRouterProvider(model)))
+    ).sort((a, b) => a.localeCompare(b));
+    if (this.openRouterProviderFilter !== "all" && !providers.includes(this.openRouterProviderFilter)) {
+      this.openRouterProviderFilter = "all";
+    }
+
+    const filters = containerEl.createDiv({ cls: "gsd-openrouter-toolbar" });
+    const searchInput = filters.createEl("input", {
+      type: "text",
+      placeholder: "Search models...",
+    });
+    searchInput.value = this.openRouterSearch;
+    searchInput.addEventListener("input", () => {
+      this.openRouterSearch = searchInput.value;
+      this.display();
+    });
+
+    const providerSelect = filters.createEl("select");
+    providerSelect.createEl("option", { text: "All providers", value: "all" });
+    providers.forEach((provider) => {
+      providerSelect.createEl("option", { text: provider, value: provider });
+    });
+    providerSelect.value = this.openRouterProviderFilter;
+    providerSelect.addEventListener("change", () => {
+      this.openRouterProviderFilter = providerSelect.value;
+      this.display();
+    });
+
+    const freeToggleLabel = filters.createEl("label");
+    const freeToggle = freeToggleLabel.createEl("input", { type: "checkbox" });
+    freeToggle.checked = this.openRouterFreeOnly;
+    freeToggle.addEventListener("change", () => {
+      this.openRouterFreeOnly = freeToggle.checked;
+      this.display();
+    });
+    freeToggleLabel.appendText(" Free only");
+
+    const selectedToggleLabel = filters.createEl("label");
+    const selectedToggle = selectedToggleLabel.createEl("input", { type: "checkbox" });
+    selectedToggle.checked = this.openRouterSelectedOnly;
+    selectedToggle.addEventListener("change", () => {
+      this.openRouterSelectedOnly = selectedToggle.checked;
+      this.display();
+    });
+    selectedToggleLabel.appendText(" Selected only");
+
+    const sortSelect = filters.createEl("select");
+    sortSelect.createEl("option", { text: "Sort: Name", value: "name" });
+    sortSelect.createEl("option", { text: "Sort: Provider", value: "provider" });
+    sortSelect.createEl("option", { text: "Sort: Context", value: "context" });
+    sortSelect.createEl("option", { text: "Sort: Cost", value: "cost" });
+    sortSelect.createEl("option", { text: "Sort: Arena", value: "arena" });
+    sortSelect.createEl("option", { text: "Sort: OpenLLM", value: "openllm" });
+    sortSelect.value = this.openRouterSort;
+    sortSelect.addEventListener("change", () => {
+      this.openRouterSort = sortSelect.value as OpenRouterSortKey;
+      this.display();
+    });
+
+    const sortDirectionButton = filters.createEl("button", {
+      text: this.openRouterSortDirection === "asc" ? "Asc" : "Desc",
+    });
+    sortDirectionButton.addEventListener("click", () => {
+      this.openRouterSortDirection = this.openRouterSortDirection === "asc" ? "desc" : "asc";
+      this.display();
+    });
+
+    const selectedSet = new Set(
+      this.plugin.settings.openrouter.selectedModels.map((id) => id.toLowerCase())
+    );
+
+    const filtered = this.getOpenRouterVisibleModels();
+
+    containerEl.createEl("p", {
+      text: `Showing ${filtered.length} of ${models.length} models.`,
+      cls: "setting-item-description",
+    });
+
+    const tableWrap = containerEl.createDiv({ cls: "gsd-openrouter-table-wrap" });
+    const table = tableWrap.createEl("table", { cls: "gsd-openrouter-table" });
+    const thead = table.createEl("thead");
+    const headRow = thead.createEl("tr");
+    ["Select", "Model", "Provider", "Context", "Cost", "Benchmarks", "Tools", "Actions"].forEach(
+      (label) => headRow.createEl("th", { text: label })
+    );
+
+    const tbody = table.createEl("tbody");
+
+    filtered.forEach((model) => {
+      const isSelected = selectedSet.has(model.id.toLowerCase());
+      const row = tbody.createEl("tr", {
+        cls: isSelected ? "is-selected" : undefined,
+      });
+
+      const selectCell = row.createEl("td");
+      const selectBox = selectCell.createEl("input", { type: "checkbox" });
+      selectBox.checked = isSelected;
+      selectBox.addEventListener("change", async () => {
+        this.toggleOpenRouterSelection(model.id, selectBox.checked);
+        await this.plugin.saveSettings();
+        this.display();
+      });
+
+      const modelCell = row.createEl("td");
+      const metaWrap = modelCell.createDiv({ cls: "gsd-openrouter-table-meta" });
+      metaWrap.createDiv({ text: model.name || model.id, cls: "gsd-openrouter-row-title" });
+      metaWrap.createDiv({ text: model.id, cls: "gsd-openrouter-row-id" });
+
+      row.createEl("td", { text: this.getOpenRouterProvider(model) });
+      row.createEl("td", { text: `${model.context_length.toLocaleString()} tokens` });
+      row.createEl("td", { text: this.formatOpenRouterPricing(model) });
+      row.createEl("td", { text: this.formatOpenRouterBenchmark(model) });
+      row.createEl("td", {
+        text: model.supported_parameters?.includes("tools") ? "Yes" : "No",
+      });
+
+      const actionsCell = row.createEl("td");
+      const actions = actionsCell.createDiv({ cls: "gsd-openrouter-table-actions" });
+
+      const copyButton = actions.createEl("button", { text: "Copy ID" });
+      copyButton.addEventListener("click", async () => {
+        try {
+          await navigator.clipboard.writeText(model.id);
+          new Notice("Copied model ID");
+        } catch (error) {
+          console.warn("[GSD] Clipboard copy failed", error);
+          new Notice("Copy failed");
+        }
+      });
+
+      if (this.isOpenRouterFreeModel(model)) {
+        const rankButton = actions.createEl("button", { text: "Rank" });
+        rankButton.addEventListener("click", async () => {
+          this.toggleOpenRouterSelection(model.id, true);
+          this.addFreeRankModel(model.id);
+          await this.plugin.saveSettings();
+          this.display();
+        });
+      }
+    });
+
+    this.renderOpenRouterFreeRank(containerEl, models);
+  }
+
+  private async fetchOpenRouterModels(force: boolean): Promise<OpenRouterModel[]> {
+    if (!force && this.plugin.settings.openrouter.modelCache.length > 0) {
+      return this.plugin.settings.openrouter.modelCache;
+    }
+
+    try {
+      const response = await requestUrl({
+        url: "https://openrouter.ai/api/v1/models",
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+      }) as RequestUrlResponse;
+
+      if (response.status !== 200) {
+        new Notice(`OpenRouter models request failed (HTTP ${response.status}).`);
+        return this.plugin.settings.openrouter.modelCache;
+      }
+
+      const payload = response.json as { data?: Array<Record<string, unknown>> };
+      if (!payload?.data || !Array.isArray(payload.data)) {
+        new Notice("OpenRouter returned an unexpected payload.");
+        return this.plugin.settings.openrouter.modelCache;
+      }
+
+      const normalized = payload.data
+        .map((raw) => this.normalizeOpenRouterModel(raw))
+        .filter((model): model is OpenRouterModel => Boolean(model));
+
+      this.plugin.settings.openrouter.modelCache = normalized;
+      this.plugin.settings.openrouter.lastFetched = new Date().toISOString();
+      await this.plugin.saveSettings();
+      return normalized;
+    } catch (error) {
+      console.warn("[GSD] Failed to fetch OpenRouter models", error);
+      new Notice("Failed to fetch OpenRouter models.");
+      return this.plugin.settings.openrouter.modelCache;
+    }
+  }
+
+  private normalizeOpenRouterModel(raw: Record<string, unknown>): OpenRouterModel | null {
+    const id = typeof raw.id === "string" ? raw.id : null;
+    if (!id) return null;
+
+    const pricing = (raw.pricing as Record<string, unknown> | undefined) ?? {};
+    const parseNumber = (value: unknown): number => {
+      if (typeof value === "number") return value;
+      if (typeof value === "string") {
+        const parsed = parseFloat(value);
+        return Number.isFinite(parsed) ? parsed : 0;
+      }
+      return 0;
+    };
+    const parseOptionalNumber = (value: unknown): number | undefined => {
+      const parsed = parseNumber(value);
+      return parsed === 0 ? undefined : parsed;
+    };
+
+    const contextLengthRaw = raw.context_length;
+    const contextLength = typeof contextLengthRaw === "number"
+      ? contextLengthRaw
+      : typeof contextLengthRaw === "string"
+        ? parseInt(contextLengthRaw, 10)
+        : 0;
+
+    return {
+      id,
+      canonical_slug: typeof raw.canonical_slug === "string" ? raw.canonical_slug : undefined,
+      hugging_face_id: typeof raw.hugging_face_id === "string" ? raw.hugging_face_id : undefined,
+      name: typeof raw.name === "string" ? raw.name : id,
+      description: typeof raw.description === "string" ? raw.description : undefined,
+      context_length: Number.isFinite(contextLength) ? contextLength : 0,
+      pricing: {
+        prompt: parseNumber(pricing.prompt),
+        completion: parseNumber(pricing.completion),
+        request: parseOptionalNumber(pricing.request),
+        image: parseOptionalNumber(pricing.image),
+        web_search: parseOptionalNumber(pricing.web_search),
+        internal_reasoning: parseOptionalNumber(pricing.internal_reasoning),
+      },
+      supported_parameters: Array.isArray(raw.supported_parameters)
+        ? (raw.supported_parameters as string[])
+        : [],
+      per_request_limits: raw.per_request_limits as Record<string, unknown> | null,
+      architecture: raw.architecture as OpenRouterModel["architecture"],
+    };
+  }
+
+  private getOpenRouterProvider(model: OpenRouterModel): string {
+    const id = model.id;
+    if (!id.includes("/")) return "unknown";
+    return id.split("/")[0];
+  }
+
+  private getOpenRouterVisibleModels(): OpenRouterModel[] {
+    const models = this.plugin.settings.openrouter.modelCache;
+    const selectedSet = new Set(
+      this.plugin.settings.openrouter.selectedModels.map((id) => id.toLowerCase())
+    );
+    const searchTerm = this.openRouterSearch.trim().toLowerCase();
+    const bench = this.plugin.settings.openrouter.benchmarks ?? {
+      arenaScores: {},
+      openLlmScores: {},
+      lastFetched: null,
+    };
+
+    const filtered = models.filter((model) => {
+      if (this.openRouterProviderFilter !== "all") {
+        if (this.getOpenRouterProvider(model) !== this.openRouterProviderFilter) {
+          return false;
+        }
+      }
+      if (this.openRouterFreeOnly && !this.isOpenRouterFreeModel(model)) {
+        return false;
+      }
+      if (this.openRouterSelectedOnly && !selectedSet.has(model.id.toLowerCase())) {
+        return false;
+      }
+      if (searchTerm) {
+        const haystack = `${model.name} ${model.id} ${model.description ?? ""}`.toLowerCase();
+        if (!haystack.includes(searchTerm)) {
+          return false;
+        }
+      }
+      return true;
+    });
+
+    const direction = this.openRouterSortDirection === "asc" ? 1 : -1;
+    const compareNumber = (left: number | null | undefined, right: number | null | undefined): number => {
+      if (left == null && right == null) return 0;
+      if (left == null) return 1;
+      if (right == null) return -1;
+      return (left - right) * direction;
+    };
+    const compareString = (left: string, right: string): number => left.localeCompare(right) * direction;
+
+    return filtered.sort((a, b) => {
+      let result = 0;
+      switch (this.openRouterSort) {
+        case "provider": {
+          result = compareString(this.getOpenRouterProvider(a), this.getOpenRouterProvider(b));
+          break;
+        }
+        case "context": {
+          result = compareNumber(a.context_length, b.context_length);
+          break;
+        }
+        case "cost": {
+          const aCost = a.pricing.prompt + a.pricing.completion;
+          const bCost = b.pricing.prompt + b.pricing.completion;
+          result = compareNumber(aCost, bCost);
+          break;
+        }
+        case "arena": {
+          result = compareNumber(bench.arenaScores[a.id], bench.arenaScores[b.id]);
+          break;
+        }
+        case "openllm": {
+          result = compareNumber(bench.openLlmScores[a.id], bench.openLlmScores[b.id]);
+          break;
+        }
+        case "name":
+        default: {
+          const aName = a.name || a.id;
+          const bName = b.name || b.id;
+          result = compareString(aName, bName);
+          break;
+        }
+      }
+
+      if (result !== 0) {
+        return result;
+      }
+
+      return a.id.localeCompare(b.id) * direction;
+    });
+  }
+
+  private getOpenRouterSelectedModels(): OpenRouterModel[] {
+    const models = this.plugin.settings.openrouter.modelCache;
+    const selectedSet = new Set(
+      this.plugin.settings.openrouter.selectedModels.map((id) => id.toLowerCase())
+    );
+    return models.filter((model) => selectedSet.has(model.id.toLowerCase()));
+  }
+
+  private isOpenRouterFreeModel(model: OpenRouterModel): boolean {
+    return model.pricing.prompt === 0 && model.pricing.completion === 0;
+  }
+
+  private formatOpenRouterPricing(model: OpenRouterModel): string {
+    if (this.isOpenRouterFreeModel(model)) {
+      return "Free";
+    }
+    const formatCost = (value: number) => `$${value.toFixed(3)}`;
+    const prompt = model.pricing.prompt * 1_000_000;
+    const completion = model.pricing.completion * 1_000_000;
+    let text = `${formatCost(prompt)}/1M in · ${formatCost(completion)}/1M out`;
+    if (model.pricing.request && model.pricing.request > 0) {
+      text += ` · ${formatCost(model.pricing.request)}/request`;
+    }
+    return text;
+  }
+
+  private formatOpenRouterBenchmark(model: OpenRouterModel): string {
+    const bench = this.plugin.settings.openrouter.benchmarks ?? {
+      arenaScores: {},
+      openLlmScores: {},
+      lastFetched: null,
+    };
+    const arenaScore = bench.arenaScores[model.id];
+    const openLlmScore = bench.openLlmScores[model.id];
+    const parts: string[] = [];
+    if (arenaScore != null) {
+      parts.push(`Arena ${Math.round(arenaScore)}`);
+    }
+    if (openLlmScore != null) {
+      parts.push(`OpenLLM ${openLlmScore.toFixed(1)}%`);
+    }
+    if (parts.length === 0) {
+      return "Bench: N/A";
+    }
+    return `Bench: ${parts.join(" · ")}`;
+  }
+
+  private async fetchOpenRouterBenchmarks(models: OpenRouterModel[]): Promise<void> {
+    if (!models.length) {
+      new Notice("No models to benchmark.");
+      return;
+    }
+
+    const arenaMap = await this.fetchArenaScores();
+    const arenaScores = { ...this.plugin.settings.openrouter.benchmarks.arenaScores };
+    const openLlmScores = { ...this.plugin.settings.openrouter.benchmarks.openLlmScores };
+
+    models.forEach((model) => {
+      const arenaScore = this.matchArenaScore(model, arenaMap);
+      if (arenaScore != null) {
+        arenaScores[model.id] = arenaScore;
+      }
+    });
+
+    for (const model of models) {
+      const openLlmScore = await this.fetchOpenLlmScore(model);
+      if (openLlmScore != null) {
+        openLlmScores[model.id] = openLlmScore;
+      }
+    }
+
+    this.plugin.settings.openrouter.benchmarks = {
+      arenaScores,
+      openLlmScores,
+      lastFetched: new Date().toISOString(),
+    };
+    await this.plugin.saveSettings();
+    new Notice("Benchmarks updated.");
+  }
+
+  private normalizeBenchmarkKey(value: string): string {
+    return value.toLowerCase().replace(/[^a-z0-9]+/g, "");
+  }
+
+  private matchArenaScore(model: OpenRouterModel, arenaMap: Map<string, number>): number | null {
+    const candidates = [
+      model.name,
+      model.id,
+      model.id.split("/").pop() ?? model.id,
+      model.canonical_slug ?? "",
+      model.hugging_face_id ?? "",
+    ].filter(Boolean);
+
+    for (const candidate of candidates) {
+      const key = this.normalizeBenchmarkKey(candidate);
+      const score = arenaMap.get(key);
+      if (score != null) {
+        return score;
+      }
+    }
+    return null;
+  }
+
+  private async fetchOpenLlmResultFiles(path: string): Promise<string[] | null> {
+    try {
+      const treeResponse = await requestUrl({
+        url: `https://huggingface.co/api/datasets/open-llm-leaderboard/results/tree/main/${this.encodePath(path)}`,
+        method: "GET",
+      }) as RequestUrlResponse;
+
+      if (treeResponse.status !== 200) {
+        return null;
+      }
+
+      const files = treeResponse.json as Array<{ path?: string }>;
+      return files
+        .map((file) => file.path)
+        .filter((entry): entry is string => Boolean(entry) && entry.includes("results_") && entry.endsWith(".json"));
+    } catch (error) {
+      const status = (error as { status?: number }).status;
+      const message = error instanceof Error ? error.message : String(error);
+      if (status === 404 || message.includes("status 404")) {
+        return null;
+      }
+      console.warn("[GSD] Failed to fetch Open LLM benchmark", error);
+      return null;
+    }
+  }
+
+  private async getOpenLlmOrgIndex(org: string): Promise<Map<string, string> | null> {
+    if (this.openLlmOrgIndex.has(org)) {
+      return this.openLlmOrgIndex.get(org) ?? null;
+    }
+
+    try {
+      const response = await requestUrl({
+        url: `https://huggingface.co/api/datasets/open-llm-leaderboard/results/tree/main/${this.encodePath(org)}`,
+        method: "GET",
+      }) as RequestUrlResponse;
+
+      if (response.status !== 200) {
+        return null;
+      }
+
+      const entries = response.json as Array<{ path?: string; type?: string }>;
+      const index = new Map<string, string>();
+      entries.forEach((entry) => {
+        if (entry.type !== "directory") return;
+        const path = entry.path;
+        if (!path) return;
+        const leaf = path.split("/").pop() ?? path;
+        index.set(this.normalizeBenchmarkKey(leaf), path);
+      });
+
+      this.openLlmOrgIndex.set(org, index);
+      return index;
+    } catch (error) {
+      const status = (error as { status?: number }).status;
+      const message = error instanceof Error ? error.message : String(error);
+      if (status === 404 || message.includes("status 404")) {
+        return null;
+      }
+      console.warn("[GSD] Failed to fetch Open LLM benchmark index", error);
+      return null;
+    }
+  }
+
+  private async resolveOpenLlmPath(candidateId: string): Promise<string | null> {
+    if (!candidateId.includes("/")) return null;
+
+    const [org, ...rest] = candidateId.split("/");
+    const repo = rest.join("/");
+    const index = await this.getOpenLlmOrgIndex(org);
+    if (!index) return null;
+
+    const directKey = this.normalizeBenchmarkKey(repo);
+    if (index.has(directKey)) {
+      return index.get(directKey) ?? null;
+    }
+
+    const withoutMeta = repo.replace(/^meta[-_]/i, "");
+    if (withoutMeta !== repo) {
+      const altKey = this.normalizeBenchmarkKey(withoutMeta);
+      if (index.has(altKey)) {
+        return index.get(altKey) ?? null;
+      }
+    }
+
+    return null;
+  }
+
+  private async fetchArenaScores(): Promise<Map<string, number>> {
+    const arenaMap = new Map<string, number>();
+    const pageSize = 100;
+    let offset = 0;
+
+    while (true) {
+      try {
+        const response = await requestUrl({
+          url: `https://datasets-server.huggingface.co/rows?dataset=mathewhe/chatbot-arena-elo&config=default&split=train&offset=${offset}&length=${pageSize}`,
+          method: "GET",
+        }) as RequestUrlResponse;
+
+        if (response.status !== 200) {
+          console.warn(`[GSD] Arena benchmark fetch failed: HTTP ${response.status}`);
+          break;
+        }
+
+        const payload = response.json as { rows?: Array<{ row?: Record<string, unknown> }> };
+        const rows = payload.rows ?? [];
+        if (!rows.length) break;
+
+        rows.forEach((entry) => {
+          const row = entry.row ?? {};
+          const model = typeof row["Model"] === "string" ? row["Model"] : null;
+          const score = typeof row["Arena Score"] === "number" ? row["Arena Score"] : null;
+          if (model && score != null) {
+            arenaMap.set(this.normalizeBenchmarkKey(model), score);
+          }
+        });
+
+        if (rows.length < pageSize) break;
+        offset += rows.length;
+      } catch (error) {
+        console.warn("[GSD] Failed to fetch Arena benchmarks", error);
+        break;
+      }
+    }
+
+    return arenaMap;
+  }
+
+  private async fetchOpenLlmScore(model: OpenRouterModel): Promise<number | null> {
+    const candidates = Array.from(new Set(
+      [model.hugging_face_id, model.canonical_slug, model.id]
+        .filter((value): value is string => Boolean(value) && value.includes("/"))
+    ));
+
+    for (const candidate of candidates) {
+      const directFiles = await this.fetchOpenLlmResultFiles(candidate);
+      const files = directFiles?.length ? directFiles : null;
+      const resolved = files ? null : await this.resolveOpenLlmPath(candidate);
+      const resolvedFiles = !files && resolved ? await this.fetchOpenLlmResultFiles(resolved) : null;
+      const resultFiles = files ?? resolvedFiles ?? [];
+
+      if (!resultFiles.length) continue;
+
+      const latestPath = resultFiles.sort().at(-1);
+      if (!latestPath) continue;
+
+      try {
+        const resultResponse = await requestUrl({
+          url: `https://huggingface.co/datasets/open-llm-leaderboard/results/resolve/main/${this.encodePath(latestPath)}`,
+          method: "GET",
+        }) as RequestUrlResponse;
+
+        if (resultResponse.status !== 200) {
+          continue;
+        }
+
+        const data = resultResponse.json as { results?: Record<string, Record<string, unknown>> };
+        const leaderboard = data?.results?.leaderboard ?? {};
+        const accNorm = leaderboard["acc_norm,none"];
+        const acc = leaderboard["acc,none"];
+        const value = typeof accNorm === "number" ? accNorm : typeof acc === "number" ? acc : null;
+        if (value == null) continue;
+
+        return Math.round(value * 1000) / 10;
+      } catch (error) {
+        const status = (error as { status?: number }).status;
+        const message = error instanceof Error ? error.message : String(error);
+        if (status === 404 || message.includes("status 404")) {
+          continue;
+        }
+        console.warn("[GSD] Failed to fetch Open LLM benchmark", error);
+        continue;
+      }
+    }
+
+    return null;
+  }
+
+  private encodePath(path: string): string {
+    return path.split("/").map((segment) => encodeURIComponent(segment)).join("/");
+  }
+
+  private toggleOpenRouterSelection(modelId: string, selected: boolean): void {
+    const existing = this.plugin.settings.openrouter.selectedModels;
+    const lowered = modelId.toLowerCase();
+    if (selected) {
+      if (!existing.some((id) => id.toLowerCase() === lowered)) {
+        this.plugin.settings.openrouter.selectedModels = [...existing, modelId];
+      }
+      return;
+    }
+    this.plugin.settings.openrouter.selectedModels = existing.filter(
+      (id) => id.toLowerCase() !== lowered
+    );
+  }
+
+  private addFreeRankModel(modelId: string): void {
+    const rank = this.plugin.settings.openrouter.freeModelRank;
+    if (!rank.includes(modelId)) {
+      this.plugin.settings.openrouter.freeModelRank = [...rank, modelId];
+    }
+  }
+
+  private renderOpenRouterFreeRank(containerEl: HTMLElement, models: OpenRouterModel[]): void {
+    this.createSection(
+      containerEl,
+      "Free model fallback (auto-free)",
+      "Set the priority order for free OpenRouter models. Use model ID \"openrouter:auto-free\" to always pick the highest-ranked model that is not rate limited."
+    );
+
+    const modelsById = new Map(models.map((model) => [model.id, model]));
+
+    const actions = containerEl.createDiv({ cls: "gsd-openrouter-toolbar" });
+    const seedButton = actions.createEl("button", { text: "Seed from selected free models" });
+    seedButton.addEventListener("click", async () => {
+      const selectedFree = this.plugin.settings.openrouter.selectedModels.filter((id) => {
+        const model = modelsById.get(id);
+        return model ? this.isOpenRouterFreeModel(model) : false;
+      });
+      this.plugin.settings.openrouter.freeModelRank = Array.from(new Set(selectedFree));
+      await this.plugin.saveSettings();
+      this.display();
+    });
+
+    const clearButton = actions.createEl("button", { text: "Clear ranking" });
+    clearButton.addEventListener("click", async () => {
+      this.plugin.settings.openrouter.freeModelRank = [];
+      await this.plugin.saveSettings();
+      this.display();
+    });
+
+    const rankList = containerEl.createDiv({ cls: "gsd-openrouter-rank-list" });
+    let dragId: string | null = null;
+
+    const renderList = () => {
+      rankList.empty();
+      const ranked = this.plugin.settings.openrouter.freeModelRank;
+      if (ranked.length === 0) {
+        rankList.createEl("p", {
+          text: "No ranked free models yet. Add one from the model list above.",
+          cls: "setting-item-description",
+        });
+        return;
+      }
+
+      ranked.forEach((modelId) => {
+        const model = modelsById.get(modelId);
+        const row = rankList.createDiv({ cls: "gsd-openrouter-rank-item" });
+        row.setAttr("draggable", "true");
+
+        const label = row.createDiv();
+        const handle = label.createSpan({ text: "||", cls: "gsd-openrouter-rank-handle" });
+        handle.setAttr("aria-hidden", "true");
+        label.createSpan({ text: model?.name || modelId });
+        label.createEl("div", { text: modelId, cls: "gsd-openrouter-row-id" });
+
+        const removeButton = row.createEl("button", { text: "Remove" });
+        removeButton.addEventListener("click", async () => {
+          this.plugin.settings.openrouter.freeModelRank = this.plugin.settings.openrouter.freeModelRank.filter(
+            (id) => id !== modelId
+          );
+          await this.plugin.saveSettings();
+          renderList();
+        });
+
+        row.addEventListener("dragstart", () => {
+          dragId = modelId;
+          row.addClass("is-dragging");
+        });
+
+        row.addEventListener("dragend", () => {
+          dragId = null;
+          row.removeClass("is-dragging");
+        });
+
+        row.addEventListener("dragover", (event) => {
+          event.preventDefault();
+          row.addClass("is-drop-target");
+        });
+
+        row.addEventListener("dragleave", () => {
+          row.removeClass("is-drop-target");
+        });
+
+        row.addEventListener("drop", async (event) => {
+          event.preventDefault();
+          row.removeClass("is-drop-target");
+          if (!dragId || dragId === modelId) return;
+
+          const current = [...this.plugin.settings.openrouter.freeModelRank];
+          const fromIndex = current.indexOf(dragId);
+          const toIndex = current.indexOf(modelId);
+          if (fromIndex === -1 || toIndex === -1) return;
+
+          current.splice(fromIndex, 1);
+          current.splice(toIndex, 0, dragId);
+          this.plugin.settings.openrouter.freeModelRank = current;
+          await this.plugin.saveSettings();
+          renderList();
+        });
+      });
+    };
+
+    renderList();
+  }
+
   private renderInboxTab(containerEl: HTMLElement): void {
     this.renderInbox(containerEl);
   }
@@ -200,6 +1097,10 @@ export class GetShitDoneSettingTab extends PluginSettingTab {
   private renderAiTab(containerEl: HTMLElement): void {
     containerEl.createEl("p", {
       text: "Choose models and (optionally) edit prompts and generation settings.",
+      cls: "setting-item-description",
+    });
+    containerEl.createEl("p", {
+      text: "OpenRouter models use provider/model IDs (e.g., openai/gpt-4o-mini).",
       cls: "setting-item-description",
     });
 
@@ -284,13 +1185,14 @@ export class GetShitDoneSettingTab extends PluginSettingTab {
     this.createSection(
       containerEl,
       "API Providers",
-      "Keys for Gemini, OpenAI, and Anthropic."
+      "Keys for Gemini, OpenAI, Anthropic, and OpenRouter."
     );
 
     const statusLine = [
       this.plugin.settings.geminiApiKey ? "Gemini ✓" : "Gemini ✕",
       this.plugin.settings.openaiApiKey ? "OpenAI ✓" : "OpenAI ✕",
       this.plugin.settings.anthropicApiKey ? "Anthropic ✓" : "Anthropic ✕",
+      this.plugin.settings.openrouterApiKey ? "OpenRouter ✓" : "OpenRouter ✕",
     ].join(" · ");
     containerEl.createEl("p", {
       text: `Configured: ${statusLine}`,
@@ -315,6 +1217,17 @@ export class GetShitDoneSettingTab extends PluginSettingTab {
       value: this.plugin.settings.openaiApiKey,
       onChange: async (value) => {
         this.plugin.settings.openaiApiKey = value;
+        await this.plugin.saveSettings();
+      },
+    });
+
+    this.addSecretSetting(containerEl, {
+      name: "OpenRouter API Key",
+      desc: "API key for OpenRouter (optional, for router models)",
+      placeholder: "sk-or-...",
+      value: this.plugin.settings.openrouterApiKey,
+      onChange: async (value) => {
+        this.plugin.settings.openrouterApiKey = value;
         await this.plugin.saveSettings();
       },
     });
@@ -673,7 +1586,7 @@ export class GetShitDoneSettingTab extends PluginSettingTab {
 
     new Setting(triggerSection)
       .setName("Enable Trigger Phrases")
-      .setDesc("Enable special phrases like 'Research', 'Follow up', or content commands")
+      .setDesc("Enable special phrases like 'Research' or 'Follow up'")
       .addToggle((toggle) =>
         toggle
           .setValue(this.plugin.settings.inbox.triggers.enabled)
@@ -711,23 +1624,6 @@ export class GetShitDoneSettingTab extends PluginSettingTab {
       },
       onChange: async (value) => {
         this.plugin.settings.inbox.triggers.researchPhrases = value;
-        await this.plugin.saveSettings();
-      },
-    });
-
-    this.createListSetting(triggerSection, {
-      name: "Content phrases",
-      desc: "Summarizes content when a capture begins with one of these",
-      value: this.plugin.settings.inbox.triggers.contentPhrases,
-      placeholder: "read\nwatch\nlisten\nreview\ncheck out",
-      helper: {
-        title: "Content phrase helper",
-        context: "Inbox content summary trigger phrases",
-        defaultQuestion:
-          "Suggest other verbs for content consumption (like read/watch). Return one per line.",
-      },
-      onChange: async (value) => {
-        this.plugin.settings.inbox.triggers.contentPhrases = value;
         await this.plugin.saveSettings();
       },
     });
@@ -953,46 +1849,18 @@ export class GetShitDoneSettingTab extends PluginSettingTab {
 
     const summarySection = this.createDetailsSection(
       containerEl,
-      "Content summaries",
-      "AI summaries for content triggers."
+      "Link summaries",
+      "Use the Summarize plugin to add an indented summary under captured links."
     );
 
     new Setting(summarySection)
-      .setName("Enable content summaries")
-      .setDesc("Generate AI takeaways for read/watch/listen triggers")
+      .setName("Enable link summaries")
+      .setDesc("When a capture includes a URL, insert a summary using the Summarize plugin")
       .addToggle((toggle) =>
         toggle
           .setValue(this.plugin.settings.inbox.contentSummary.enabled)
           .onChange(async (value) => {
             this.plugin.settings.inbox.contentSummary.enabled = value;
-            await this.plugin.saveSettings();
-          })
-      );
-
-    new Setting(summarySection)
-      .setName("Takeaways count")
-      .setDesc("How many bullets to generate per summary")
-      .addSlider((slider) =>
-        slider
-          .setLimits(2, 8, 1)
-          .setValue(this.plugin.settings.inbox.contentSummary.takeawaysCount)
-          .setDynamicTooltip()
-          .onChange(async (value) => {
-            this.plugin.settings.inbox.contentSummary.takeawaysCount = value;
-            await this.plugin.saveSettings();
-          })
-      );
-
-    new Setting(summarySection)
-      .setName("Max words per takeaway")
-      .setDesc("Upper bound for each summary bullet")
-      .addSlider((slider) =>
-        slider
-          .setLimits(8, 30, 1)
-          .setValue(this.plugin.settings.inbox.contentSummary.maxWordsPerTakeaway)
-          .setDynamicTooltip()
-          .onChange(async (value) => {
-            this.plugin.settings.inbox.contentSummary.maxWordsPerTakeaway = value;
             await this.plugin.saveSettings();
           })
       );
@@ -2361,6 +3229,9 @@ export class GetShitDoneSettingTab extends PluginSettingTab {
 
   private canUseModel(model: string): boolean {
     const lower = model.toLowerCase();
+    if (this.isOpenRouterModel(lower)) {
+      return Boolean(this.plugin.settings.openrouterApiKey);
+    }
     if (lower.startsWith("claude-")) {
       return Boolean(this.plugin.settings.anthropicApiKey);
     }
@@ -2368,6 +3239,21 @@ export class GetShitDoneSettingTab extends PluginSettingTab {
       return Boolean(this.plugin.settings.openaiApiKey);
     }
     return Boolean(this.plugin.settings.geminiApiKey);
+  }
+
+  private isOpenRouterModel(modelLower: string): boolean {
+    if (modelLower.startsWith("openrouter:")) {
+      return true;
+    }
+    if (modelLower.includes("/")) {
+      return true;
+    }
+    if (this.plugin.settings.openrouter?.selectedModels?.length) {
+      return this.plugin.settings.openrouter.selectedModels.some(
+        (id) => id.toLowerCase() === modelLower
+      );
+    }
+    return false;
   }
 
   private openSettingsHelperModal(options: Omit<SettingsHelperOptions, "model" | "aiService"> & {

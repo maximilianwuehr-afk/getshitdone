@@ -26,6 +26,19 @@ type InboxRouteDecision = {
   ruleId?: string;
 };
 
+type SummarizeAPI = {
+  summarizeUrl: (
+    url: string,
+    options?: {
+      length?: string;
+      language?: string;
+      model?: string;
+      onStream?: (chunk: string) => void;
+    }
+  ) => Promise<string>;
+  isConfigured: () => boolean;
+};
+
 class DailyNoteNotReadyError extends Error {
   constructor(message: string) {
     super(message);
@@ -106,7 +119,7 @@ export class InboxAction {
 
     // Check for trigger phrases FIRST (sync, but quick string check)
     // These are explicit user commands that should be handled specially
-    // Priority: followup > research > content
+    // Priority: followup > research
     if (this.settings.inbox.triggers.enabled) {
       const trigger = this.detectTriggerPhrase(item.content);
       if (trigger === "followup") {
@@ -130,16 +143,6 @@ export class InboxAction {
           });
         });
         new Notice("Starting research...");
-        return;
-      } else if (trigger === "content") {
-        // "Read/Watch/Listen X" - capture fast, then enhance with AI summary
-        this.handleContentTrigger(item).catch((error: unknown) => {
-          handleError("Inbox: Content trigger failed", error, {
-            showNotice: true,
-            noticeMessage: "Content summary failed - check console for details",
-          });
-        });
-        new Notice("Capturing content...");
         return;
       }
     }
@@ -218,10 +221,10 @@ export class InboxAction {
 
   /**
    * Detect trigger phrases at the start of content
-   * Returns "research", "followup", "content", or null
-   * Priority: followup > research > content (checked in processInboxItem)
+   * Returns "research", "followup", or null
+   * Priority: followup > research (checked in processInboxItem)
    */
-  private detectTriggerPhrase(content: string): "research" | "followup" | "content" | null {
+  private detectTriggerPhrase(content: string): "research" | "followup" | null {
     const normalized = this.normalizeTriggerContent(content);
     const followupMatch = this.getLeadingPhraseMatch(
       normalized,
@@ -237,14 +240,6 @@ export class InboxAction {
     );
     if (researchMatch) {
       return "research";
-    }
-
-    const contentMatch = this.getLeadingPhraseMatch(
-      normalized,
-      this.settings.inbox.triggers.contentPhrases
-    );
-    if (contentMatch) {
-      return "content";
     }
 
     return null;
@@ -538,181 +533,6 @@ Provide a well-structured research summary.`;
   }
 
   // ============================================================================
-  // Content Trigger Handler
-  // ============================================================================
-
-  /**
-   * Handle "Read/Watch/Listen/Review/Summarize/Check out" trigger phrases
-   * Flow: Fast capture original line, then async enhance with 4 key takeaways
-   */
-  private async handleContentTrigger(item: InboxItem): Promise<void> {
-    // Strip trigger phrase from content
-    let contentQuery = this.stripLeadingTriggerPhrase(
-      item.content,
-      this.settings.inbox.triggers.contentPhrases,
-      { stripTrailingColon: true }
-    );
-
-    if (!contentQuery) {
-      new Notice("No content to summarize");
-      return;
-    }
-
-    // Extract URL if present
-    const urlMatch = contentQuery.match(/(https?:\/\/[^\s]+)/);
-    const url = urlMatch ? urlMatch[1] : null;
-    const title = url ? contentQuery.replace(url, "").trim() || url : contentQuery;
-
-    console.log(`[GSD Inbox] Content trigger: title="${title}", url="${url || 'none'}"`);
-
-    // FAST PATH: Append original line immediately
-    const dailyNotePath = await this.getDailyNotePath();
-    if (!dailyNotePath) {
-      new Notice("Could not find today's daily note");
-      return;
-    }
-
-    const file = this.app.vault.getAbstractFileByPath(dailyNotePath);
-    if (!file || !(file instanceof TFile)) {
-      new Notice("Daily note not found");
-      return;
-    }
-
-    const timestamp = moment().format(this.settings.inbox.formatting.timeFormat);
-    const displayContent = this.normalizeTriggerContent(item.content) || item.content.trim();
-    const originalLine = `- ${timestamp} ${displayContent}`;
-
-    // Append the original line first (fast path)
-    let fileContent = await this.app.vault.read(file);
-    if (!this.settings.inbox.contentSummary.enabled) {
-      const newContent = this.appendToThoughtsSection(fileContent, originalLine);
-      await this.app.vault.modify(file, newContent);
-      new Notice("Captured content (summaries disabled)");
-      return;
-    }
-
-    const newContentWithPlaceholder = this.appendToThoughtsSection(
-      fileContent,
-      originalLine + "\n\t- ⏳ Generating summary..."
-    );
-    await this.app.vault.modify(file, newContentWithPlaceholder);
-
-    // ASYNC: Generate takeaways using AI (let AI fetch the URL directly via web tools)
-    try {
-      const takeaways = await this.generateContentTakeaways(title, url);
-
-      if (!takeaways) {
-        // Remove placeholder and show error
-        fileContent = await this.app.vault.read(file);
-        const updatedContent = fileContent.replace(
-          `${originalLine}\n\t- ⏳ Generating summary...`,
-          `${originalLine}\n\t- ❌ Failed to generate summary`
-        );
-        await this.app.vault.modify(file, updatedContent);
-        new Notice("Failed to generate content summary");
-        return;
-      }
-
-      // Format takeaways as indented bullets
-      const formattedTakeaways = takeaways
-        .map(t => `\t- ${t}`)
-        .join("\n");
-
-      // Replace placeholder with actual takeaways
-      fileContent = await this.app.vault.read(file);
-      const finalContent = fileContent.replace(
-        `${originalLine}\n\t- ⏳ Generating summary...`,
-        `${originalLine}\n${formattedTakeaways}`
-      );
-      await this.app.vault.modify(file, finalContent);
-
-      new Notice(`Content summary added (${takeaways.length} takeaways)`);
-    } catch (error: unknown) {
-      handleError("Inbox: Content summary failed", error, {
-        showNotice: true,
-        noticeMessage: "Content summary failed",
-      });
-
-      // Clean up placeholder
-      try {
-        fileContent = await this.app.vault.read(file);
-        const cleanedContent = fileContent.replace(
-          `${originalLine}\n\t- ⏳ Generating summary...`,
-          `${originalLine}\n\t- ❌ Summary failed`
-        );
-        await this.app.vault.modify(file, cleanedContent);
-      } catch {
-        // Ignore cleanup errors
-      }
-    }
-  }
-
-  /**
-   * Generate 4 key takeaways from content using AI
-   * Uses web tools to fetch URL content directly - no manual fetching needed
-   */
-  private async generateContentTakeaways(
-    title: string,
-    url: string | null
-  ): Promise<string[] | null> {
-    const summarySettings = this.settings.inbox.contentSummary;
-    const takeawaysCount = Math.max(1, summarySettings.takeawaysCount);
-    const maxWords = Math.max(5, summarySettings.maxWordsPerTakeaway);
-
-    const prompt = `You are summarizing content for a busy professional.
-${url ? `Read this URL and extract` : "Research this topic and extract"} exactly ${takeawaysCount} key takeaways.
-Each takeaway should be:
-- One sentence, max ${maxWords} words
-- Actionable or insightful
-- No fluff or generic statements
-
-${url ? `URL: ${url}` : `Topic: ${title}`}
-${url && title !== url ? `Title: ${title}` : ""}
-
-Return only the ${takeawaysCount} bullet points, one per line, without numbers or bullet markers.`;
-
-    try {
-      const model =
-        this.settings.models.inboxRoutingModel ||
-        this.settings.models.briefingModel ||
-        "gemini-2.0-flash";
-      const result = await this.aiService.callModel(
-        "You are a content summarizer. Be concise and insightful.",
-        prompt,
-        model,
-        {
-          useSearch: true, // Let AI fetch URL content directly via web tools
-          temperature: 0.2,
-          thinkingBudget: null,
-        }
-      );
-
-      if (!result) {
-        return null;
-      }
-
-      // Parse the result into individual takeaways
-      const lines = result
-        .split("\n")
-        .map(line => line.trim())
-        .filter(line => line.length > 0)
-        // Remove any leading bullets, numbers, or dashes
-        .map(line => line.replace(/^[-*•]\s*/, "").replace(/^\d+\.\s*/, ""))
-        .filter(line => line.length > 0)
-        .slice(0, takeawaysCount);
-
-      if (lines.length === 0) {
-        return null;
-      }
-
-      return lines;
-    } catch (error: unknown) {
-      console.log("[GSD Inbox] AI takeaway generation failed:", error);
-      return null;
-    }
-  }
-
-  // ============================================================================
   // Smart Suggestions Modal
   // ============================================================================
 
@@ -974,6 +794,9 @@ Return only the ${takeawaysCount} bullet points, one per line, without numbers o
   private hasApiKeyForModel(model: string): boolean {
     if (!model) return false;
     const lower = model.toLowerCase();
+    if (lower.startsWith("openrouter:") || lower.includes("/")) {
+      return Boolean(this.settings.openrouterApiKey);
+    }
     if (lower.startsWith("claude-")) {
       return Boolean(this.settings.anthropicApiKey);
     }
@@ -1172,6 +995,140 @@ Return only the ${takeawaysCount} bullet points, one per line, without numbers o
     return /^https?:\/\//i.test(trimmed) || /^www\./i.test(trimmed);
   }
 
+  private extractFirstUrl(content: string): string | null {
+    const trimmed = content.trim();
+    if (!trimmed) return null;
+
+    const mdLinkMatch = trimmed.match(/\[[^\]]*]\((https?:\/\/[^)]+)\)/i);
+    if (mdLinkMatch?.[1]) {
+      return mdLinkMatch[1].trim();
+    }
+
+    const urlMatch = trimmed.match(/https?:\/\/[^\s<>"\]]+/i);
+    if (urlMatch?.[0]) {
+      return urlMatch[0].trim();
+    }
+
+    const wwwMatch = trimmed.match(/\bwww\.[^\s<>"\]]+/i);
+    if (wwwMatch?.[0]) {
+      return `https://${wwwMatch[0]}`;
+    }
+
+    return null;
+  }
+
+  private getSummarizeApi(): SummarizeAPI | null {
+    const plugins = (this.app as any).plugins;
+    if (!plugins) return null;
+
+    const plugin =
+      typeof plugins.getPlugin === "function"
+        ? plugins.getPlugin("summarize")
+        : plugins.plugins?.["summarize"];
+    const api = plugin?.api;
+
+    if (!api || typeof api.summarizeUrl !== "function") {
+      return null;
+    }
+
+    return api as SummarizeAPI;
+  }
+
+  private getLinkSummaryUrl(item: InboxItem, decision: InboxRouteDecision): string | null {
+    if (!this.settings.inbox.contentSummary.enabled) return null;
+    if (decision.format !== "thought") return null;
+    if (decision.destination === "meeting_followup") return null;
+
+    return this.extractFirstUrl(item.content);
+  }
+
+  private formatSummaryAsIndentedBullet(summary: string): string {
+    const cleaned = summary
+      .split("\n")
+      .map(line => line.trim())
+      .filter(Boolean)
+      .map(line => line.replace(/^[-*•]\s+/, ""));
+
+    if (cleaned.length === 0) {
+      return "\t- (No summary)";
+    }
+
+    const [first, ...rest] = cleaned;
+    if (rest.length === 0) {
+      return `\t- ${first}`;
+    }
+
+    return `\t- ${first}\n${rest.map(line => `\t  ${line}`).join("\n")}`;
+  }
+
+  private replaceLastOccurrence(content: string, target: string, replacement: string): string {
+    const idx = content.lastIndexOf(target);
+    if (idx === -1) return content;
+    return content.slice(0, idx) + replacement + content.slice(idx + target.length);
+  }
+
+  private async replaceSummaryPlaceholder(
+    file: TFile,
+    originalLine: string,
+    replacement: string
+  ): Promise<void> {
+    const placeholderBlock = `${originalLine}\n\t- ⏳ Summarizing...`;
+    const fileContent = await this.app.vault.read(file);
+    if (!fileContent.includes(placeholderBlock)) return;
+
+    const updated = this.replaceLastOccurrence(
+      fileContent,
+      placeholderBlock,
+      `${originalLine}\n${replacement}`
+    );
+    await this.app.vault.modify(file, updated);
+  }
+
+  private async generateLinkSummaryAsync(
+    file: TFile,
+    originalLine: string,
+    url: string
+  ): Promise<void> {
+    const summarizeApi = this.getSummarizeApi();
+    if (!summarizeApi) {
+      await this.replaceSummaryPlaceholder(
+        file,
+        originalLine,
+        "\t- ❌ Summarize plugin not available"
+      );
+      new Notice("Summarize plugin not available");
+      return;
+    }
+
+    if (!summarizeApi.isConfigured()) {
+      await this.replaceSummaryPlaceholder(
+        file,
+        originalLine,
+        "\t- ❌ Summarize plugin not configured"
+      );
+      new Notice("Summarize plugin not configured");
+      return;
+    }
+
+    try {
+      const summary = await summarizeApi.summarizeUrl(url);
+      const formattedSummary = this.formatSummaryAsIndentedBullet(summary);
+      await this.replaceSummaryPlaceholder(file, originalLine, formattedSummary);
+      new Notice("Link summary added");
+    } catch (error: unknown) {
+      handleError("Inbox: Link summary failed", error, {
+        showNotice: true,
+        noticeMessage: "Link summary failed",
+      });
+
+      try {
+        await this.replaceSummaryPlaceholder(file, originalLine, "\t- ❌ Summary failed");
+      } catch {
+        // Ignore cleanup errors
+      }
+    }
+  }
+
   /**
    * Parse content type from string parameter
    */
@@ -1264,6 +1221,24 @@ Return only the ${takeawaysCount} bullet points, one per line, without numbers o
     }
 
     const content = await this.app.vault.read(file);
+
+    const summaryUrl = this.getLinkSummaryUrl(item, decision);
+    if (summaryUrl) {
+      const formatted = this.formatAsThought(item);
+      const placeholderBlock = `${formatted}\n\t- ⏳ Summarizing...`;
+
+      if (decision.destination === "daily_end") {
+        const separator = content.endsWith("\n") ? "" : "\n";
+        const newContent = `${content}${separator}${placeholderBlock}`;
+        await this.app.vault.modify(file, newContent);
+      } else {
+        const newContent = this.appendToThoughtsSection(content, placeholderBlock);
+        await this.app.vault.modify(file, newContent);
+      }
+
+      void this.generateLinkSummaryAsync(file, formatted, summaryUrl);
+      return;
+    }
 
     if (decision.destination === "meeting_followup" && item.meetingContext) {
       // Append as task after meeting line
