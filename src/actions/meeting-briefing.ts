@@ -64,8 +64,9 @@ export class MeetingBriefingAction {
 
   /**
    * Process a single meeting briefing
+   * @param bypassFilter - If true, skip the AI filter and always generate briefing (used for manual triggers)
    */
-  async processMeetingBriefing(item: BriefingQueueItem, filePath: string): Promise<void> {
+  async processMeetingBriefing(item: BriefingQueueItem, filePath: string, bypassFilter: boolean = false): Promise<void> {
     const { event: e, anchor, participants, noteTitle } = item;
 
     // Normalize/clean participants (dedupe + exclude rooms/resources + apply user excludes)
@@ -108,37 +109,43 @@ export class MeetingBriefingAction {
       .map((p) => p.displayName || p.email)
       .join(", ");
 
-    // Step A: Use AI filter to determine if briefing is needed
-    const filterPrompt = this.settings.prompts.meetingFilter
-      .replace("{title}", e.summary || "")
-      .replace("{attendees}", attendeesText)
-      .replace("{description}", description.substring(0, 500).replace(/\n/g, " "));
-
+    // Step A: Use AI filter to determine if briefing is needed (unless bypassed)
     let isImportant = "NO";
-    try {
-      console.log(`[GSD] Calling filter for "${e.summary}" with model: ${this.settings.models.filterModel}`);
-      const filterCfg = this.settings.generationConfigs?.meetingFilter;
-      const filterRes = await this.aiService.callModel(
-        "You are a filter.",
-        filterPrompt,
-        this.settings.models.filterModel,
-        {
-          useSearch: false,
-          temperature: filterCfg?.temperature,
-          thinkingBudget: filterCfg?.thinkingBudget ?? undefined,
-        }
-      );
-      console.log(`[GSD] Filter response for "${e.summary}": ${filterRes}`);
-      if (filterRes && filterRes.includes("YES")) {
-        isImportant = "YES";
-      }
-    } catch (error: unknown) {
-      handleError("Meeting filter failed", error, {
-        silent: true, // Expected to fail sometimes
-      });
-    }
 
-    console.log(`[GSD] Meeting "${e.summary}" importance: ${isImportant}`);
+    if (bypassFilter) {
+      console.log(`[GSD] Bypassing filter for "${e.summary}" (manual trigger)`);
+      isImportant = "YES";
+    } else {
+      const filterPrompt = this.settings.prompts.meetingFilter
+        .replace("{title}", e.summary || "")
+        .replace("{attendees}", attendeesText)
+        .replace("{description}", description.substring(0, 500).replace(/\n/g, " "));
+
+      try {
+        console.log(`[GSD] Calling filter for "${e.summary}" with model: ${this.settings.models.filterModel}`);
+        const filterCfg = this.settings.generationConfigs?.meetingFilter;
+        const filterRes = await this.aiService.callModel(
+          "You are a filter.",
+          filterPrompt,
+          this.settings.models.filterModel,
+          {
+            useSearch: false,
+            temperature: filterCfg?.temperature,
+            thinkingBudget: filterCfg?.thinkingBudget ?? undefined,
+          }
+        );
+        console.log(`[GSD] Filter response for "${e.summary}": ${filterRes}`);
+        if (filterRes && filterRes.includes("YES")) {
+          isImportant = "YES";
+        }
+      } catch (error: unknown) {
+        handleError("Meeting filter failed", error, {
+          silent: true, // Expected to fail sometimes
+        });
+      }
+
+      console.log(`[GSD] Meeting "${e.summary}" importance: ${isImportant}`);
+    }
 
     if (isImportant === "YES") {
       // Show researching indicator
@@ -323,7 +330,7 @@ export class MeetingBriefingAction {
     // Get participants
     const participantsFiltered = this.filterParticipants(event.attendees || []);
 
-    // Process this event
+    // Process this event (bypass filter for manual triggers)
     const queueItem: BriefingQueueItem = {
       event: event,
       anchor: meetingPath,
@@ -331,7 +338,7 @@ export class MeetingBriefingAction {
       noteTitle: event.summary || "(No title)",
     };
 
-    await this.processMeetingBriefing(queueItem, filePath);
+    await this.processMeetingBriefing(queueItem, filePath, true);
   }
 
   /**

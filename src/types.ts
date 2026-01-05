@@ -72,6 +72,9 @@ export interface PluginSettings {
 
   // OpenRouter settings
   openrouter: OpenRouterSettings;
+
+  // Reference system settings
+  reference: ReferenceSettings;
 }
 
 export interface ModelSettings {
@@ -99,6 +102,30 @@ export interface O3Settings {
   masterNotePath: string;
   meetingTitleRegex: string;
   dailyNoteInsert: boolean;
+}
+
+// ============================================================================
+// Reference System Types
+// ============================================================================
+
+export type ReferenceSourceType = "article" | "video" | "podcast" | "paper" | "tweet" | "repo" | "unknown";
+
+export interface TopicNode {
+  _aliases?: string[];
+  [key: string]: string[] | TopicNode | undefined;
+}
+
+export interface TopicHierarchy {
+  [key: string]: TopicNode;
+}
+
+export interface ReferenceSettings {
+  enabled: boolean;
+  referencesFolder: string;
+  topicsFilePath: string;
+  urlTriggers: string[];
+  autoProcess: boolean;
+  dailyNoteLink: boolean;
 }
 
 export interface O3CoachSettings {
@@ -768,6 +795,15 @@ export const DEFAULT_SETTINGS: PluginSettings = {
       openLlmFetched: {},
       lastFetched: null,
     },
+  },
+
+  reference: {
+    enabled: true,
+    referencesFolder: "References",
+    topicsFilePath: "Z_Settings & Tools/Topics.md",
+    urlTriggers: ["Ref:", "Reference:", "Save:"],
+    autoProcess: true,
+    dailyNoteLink: true,
   },
 };
 

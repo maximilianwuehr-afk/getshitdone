@@ -105,6 +105,9 @@ export class O3PrepAction {
 
       if (!person) continue;
 
+      // Skip if this person already has a meeting (show only first O3 per person)
+      if (matchedPeople.has(person.filePath)) continue;
+
       const meetingTime = event.start?.dateTime
         ? moment(event.start.dateTime).format("ddd, HH:mm")
         : "Time TBD";

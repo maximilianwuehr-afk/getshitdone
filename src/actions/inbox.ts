@@ -15,6 +15,7 @@ import { GoogleServices } from "../services/google-services";
 import { AIService } from "../services/ai-service";
 import { VaultSearchService } from "../services/vault-search";
 import { IndexService } from "../services/index-service";
+import { ReferenceAction } from "./reference";
 
 const moment = (window as any).moment;
 
@@ -33,6 +34,7 @@ type SummarizeAPI = {
       length?: string;
       language?: string;
       model?: string;
+      prompt?: string;
       onStream?: (chunk: string) => void;
     }
   ) => Promise<string>;
@@ -59,6 +61,7 @@ export class InboxAction {
   private aiService: AIService;
   private vaultSearch: VaultSearchService;
   private indexService: IndexService;
+  private referenceAction: ReferenceAction;
 
   constructor(
     app: App,
@@ -76,6 +79,7 @@ export class InboxAction {
     this.aiService = aiService;
     this.vaultSearch = vaultSearch;
     this.indexService = indexService;
+    this.referenceAction = new ReferenceAction(app, settings, indexService, aiService);
   }
 
   /**
@@ -83,6 +87,7 @@ export class InboxAction {
    */
   updateSettings(settings: PluginSettings): void {
     this.settings = settings;
+    this.referenceAction.updateSettings(settings);
   }
 
   // ============================================================================
@@ -119,7 +124,22 @@ export class InboxAction {
 
     // Check for trigger phrases FIRST (sync, but quick string check)
     // These are explicit user commands that should be handled specially
-    // Priority: followup > research
+    // Priority: reference > followup > research
+
+    // Check reference trigger first (Ref: https://...)
+    if (this.settings.reference.enabled) {
+      const refUrl = this.referenceAction.detectReferenceTrigger(item.content);
+      if (refUrl) {
+        this.handleReferenceTrigger(item, refUrl).catch((error: unknown) => {
+          handleError("Inbox: Reference trigger failed", error, {
+            showNotice: true,
+            noticeMessage: "Reference save failed - check console for details",
+          });
+        });
+        return;
+      }
+    }
+
     if (this.settings.inbox.triggers.enabled) {
       const trigger = this.detectTriggerPhrase(item.content);
       if (trigger === "followup") {
@@ -361,6 +381,70 @@ export class InboxAction {
     }
 
     return formatted;
+  }
+
+  // ============================================================================
+  // Reference Trigger Handler
+  // ============================================================================
+
+  /**
+   * Handle "Ref:" trigger phrase - process URL into reference note
+   */
+  private async handleReferenceTrigger(item: InboxItem, url: string): Promise<void> {
+    console.log(`[GSD Inbox] Reference trigger detected: ${url}`);
+
+    // Process URL through reference action
+    const notePath = await this.referenceAction.processUrl(url);
+    if (!notePath) {
+      return; // Error already shown by referenceAction
+    }
+
+    // Update daily note with wikilink to reference
+    if (this.settings.reference.dailyNoteLink) {
+      // The original line is the full content with trigger
+      const originalLine = item.content;
+
+      // Get reference title from the note path
+      const fileName = notePath.split("/").pop()?.replace(".md", "") || "";
+      const title = fileName
+        .replace(/-/g, " ")
+        .replace(/\b\w/g, (c) => c.toUpperCase());
+
+      // Read the created note to get the primary tag
+      const file = this.app.vault.getAbstractFileByPath(notePath);
+      let primaryTag = "uncategorized";
+      if (file && file instanceof TFile) {
+        const content = await this.app.vault.read(file);
+        const tagMatch = content.match(/tags:\s*\n\s*-\s*([^\n]+)/);
+        if (tagMatch) {
+          primaryTag = tagMatch[1].trim();
+        }
+      }
+
+      // Try to update daily note (replace trigger line with wikilink)
+      const updated = await this.referenceAction.updateDailyNoteWithReference(
+        originalLine,
+        notePath,
+        title,
+        primaryTag
+      );
+
+      if (!updated) {
+        // If we couldn't find the original line, append to daily note
+        const dailyNotePath = await this.getDailyNotePath();
+        if (dailyNotePath) {
+          const dailyFile = this.app.vault.getAbstractFileByPath(dailyNotePath);
+          if (dailyFile && dailyFile instanceof TFile) {
+            const dailyContent = await this.app.vault.read(dailyFile);
+            const timestamp = moment().format(this.settings.inbox.formatting.timeFormat);
+            const wikilink = `[[${notePath.replace(".md", "")}|${title}]]`;
+            const newLine = `- ${timestamp} ${wikilink} #${primaryTag}`;
+            const newContent = this.appendToThoughtsSection(dailyContent, newLine);
+            await this.app.vault.modify(dailyFile, newContent);
+          }
+        }
+      }
+    }
   }
 
   // ============================================================================
@@ -1042,7 +1126,34 @@ Provide a well-structured research summary.`;
     return this.extractFirstUrl(item.content);
   }
 
-  private formatSummaryAsIndentedBullet(summary: string): string {
+  /**
+   * Parse LLM response that contains summary + tags
+   * Expects format: "Summary text...\nTAGS: tag1, tag2"
+   */
+  private parseSummaryWithTags(result: string): { summary: string; tags: string[] } {
+    const lines = result.trim().split("\n");
+    let tags: string[] = [];
+    let summaryLines: string[] = [];
+
+    for (const line of lines) {
+      const tagMatch = line.match(/^TAGS?:\s*(.+)$/i);
+      if (tagMatch) {
+        tags = tagMatch[1]
+          .split(",")
+          .map(t => t.trim().toLowerCase().replace(/^#/, ""))
+          .filter(t => t.length > 0 && t !== "uncategorized");
+      } else {
+        summaryLines.push(line);
+      }
+    }
+
+    return {
+      summary: summaryLines.join("\n").trim(),
+      tags: tags.length > 0 ? tags : ["uncategorized"],
+    };
+  }
+
+  private formatSummaryAsIndentedBullet(summary: string, tags: string[] = []): string {
     const cleaned = summary
       .split("\n")
       .map(line => line.trim())
@@ -1053,12 +1164,17 @@ Provide a well-structured research summary.`;
       return "\t- (No summary)";
     }
 
+    // Format tags as hashtags (e.g., #ai/agents)
+    const tagStr = tags.length > 0
+      ? " " + tags.map(t => `#${t}`).join(" ")
+      : "";
+
     const [first, ...rest] = cleaned;
     if (rest.length === 0) {
-      return `\t- ${first}`;
+      return `\t- ${first}${tagStr}`;
     }
 
-    return `\t- ${first}\n${rest.map(line => `\t  ${line}`).join("\n")}`;
+    return `\t- ${first}${tagStr}\n${rest.map(line => `\t  ${line}`).join("\n")}`;
   }
 
   private replaceLastOccurrence(content: string, target: string, replacement: string): string {
@@ -1111,8 +1227,48 @@ Provide a well-structured research summary.`;
     }
 
     try {
-      const summary = await summarizeApi.summarizeUrl(url);
-      const formattedSummary = this.formatSummaryAsIndentedBullet(summary);
+      let summary: string;
+      let tags: string[] = [];
+
+      // If reference system is enabled, use combined prompt for summary + tags
+      if (this.settings.reference.enabled) {
+        const topicsContent = await this.referenceAction.getTopicsFileContent();
+
+        if (topicsContent) {
+          // Combined prompt: summarize + categorize in one call
+          const customPrompt = `Summarize this content in {{wordCount}} words. {{language}}
+
+After the summary, on a NEW LINE, output topic tags from the hierarchy below.
+
+## Topic Hierarchy
+${topicsContent}
+
+## Instructions for Tags
+- Output tags on the LAST LINE in format: TAGS: tag1, tag2
+- Use exact paths from hierarchy (e.g., ai/agents, leadership/urgency)
+- Only include clearly relevant tags (1-3 max)
+- If nothing matches, use: TAGS: uncategorized
+
+## Content to Summarize
+{{content}}`;
+
+          const result = await summarizeApi.summarizeUrl(url, { prompt: customPrompt });
+
+          // Parse result: extract summary and tags
+          const parsed = this.parseSummaryWithTags(result);
+          summary = parsed.summary;
+          tags = parsed.tags;
+          console.log(`[GSD Inbox] Combined summary+tags. Tags: ${tags.join(", ")}`);
+        } else {
+          // No topics file, just summarize
+          summary = await summarizeApi.summarizeUrl(url);
+        }
+      } else {
+        // Reference system disabled, just summarize
+        summary = await summarizeApi.summarizeUrl(url);
+      }
+
+      const formattedSummary = this.formatSummaryAsIndentedBullet(summary, tags);
       await this.replaceSummaryPlaceholder(file, originalLine, formattedSummary);
       new Notice("Link summary added");
     } catch (error: unknown) {

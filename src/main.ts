@@ -1,4 +1,4 @@
-import { App, Plugin, TFile, Notice } from "obsidian";
+import { App, Plugin, TFile, Notice, Editor, MarkdownView } from "obsidian";
 import { GetShitDoneSettingTab } from "./settings";
 import { DEFAULT_SETTINGS, PluginSettings, SettingsAware, TemplaterObject } from "./types";
 import { deepMerge } from "./utils/deep-merge";
@@ -23,6 +23,7 @@ import { AmieTranscriptAction } from "./actions/amie-transcript";
 import { O3PrepAction } from "./actions/o3-prep";
 import { O3CoachAction } from "./actions/o3-coach";
 import { O3DashboardView, O3_DASHBOARD_VIEW } from "./views/o3-dashboard";
+import { ReferenceAction } from "./actions/reference";
 
 export default class GetShitDonePlugin extends Plugin {
   settings: PluginSettings = DEFAULT_SETTINGS;
@@ -45,6 +46,7 @@ export default class GetShitDonePlugin extends Plugin {
   private amieTranscript!: AmieTranscriptAction;
   private o3Prep!: O3PrepAction;
   private o3Coach!: O3CoachAction;
+  private reference!: ReferenceAction;
 
   // Webhook server (public for settings access)
   webhookServer!: WebhookServer;
@@ -144,6 +146,13 @@ export default class GetShitDonePlugin extends Plugin {
       this.aiService
     );
 
+    this.reference = new ReferenceAction(
+      this.app,
+      this.settings,
+      this.indexService,
+      this.aiService
+    );
+
     this.webhookServer = new WebhookServer(this.settings, this.amieTranscript);
 
     // Wire up circular dependency
@@ -170,6 +179,7 @@ export default class GetShitDonePlugin extends Plugin {
       this.amieTranscript,
       this.o3Prep,
       this.o3Coach,
+      this.reference,
       this.webhookServer
     );
 
@@ -388,12 +398,121 @@ export default class GetShitDonePlugin extends Plugin {
       name: "Open O3 Dashboard",
       callback: () => this.activateO3Dashboard(),
     });
+
+    // Command: Save Reference from Clipboard
+    this.addCommand({
+      id: "save-reference-clipboard",
+      name: "Save Reference from Clipboard",
+      callback: () => this.saveReferenceFromClipboard(),
+    });
+
+    // Command: Tag and Link Selection/Note
+    this.addCommand({
+      id: "tag-and-link",
+      name: "Tag and Link Selection/Note",
+      editorCallback: (editor: Editor, view: MarkdownView) => this.tagAndLinkContent(editor, view),
+    });
   }
 
   private async activateO3Dashboard(): Promise<void> {
     const leaf = this.app.workspace.getRightLeaf(false);
     await leaf?.setViewState({ type: O3_DASHBOARD_VIEW, active: true });
     this.app.workspace.revealLeaf(leaf);
+  }
+
+  /**
+   * Save a reference from clipboard URL
+   */
+  private async saveReferenceFromClipboard(): Promise<void> {
+    try {
+      const content = await navigator.clipboard.readText();
+      if (!content.trim()) {
+        new Notice("Clipboard is empty");
+        return;
+      }
+
+      // Check if it's a URL
+      const urlMatch = content.trim().match(/^https?:\/\/[^\s]+/);
+      if (!urlMatch) {
+        new Notice("Clipboard doesn't contain a URL");
+        return;
+      }
+
+      const url = urlMatch[0];
+      await this.reference.processUrl(url);
+    } catch (error) {
+      console.error("[GSD] Failed to read clipboard:", error);
+      new Notice("Failed to read clipboard");
+    }
+  }
+
+  /**
+   * Tag and link selected text or active note
+   * Adds topic tags and entity wikilinks
+   */
+  private async tagAndLinkContent(editor: Editor, view: MarkdownView): Promise<void> {
+    const selection = editor.getSelection();
+    const hasSelection = selection.length > 0;
+    const content = hasSelection ? selection : editor.getValue();
+
+    if (!content.trim()) {
+      new Notice("No content to tag");
+      return;
+    }
+
+    new Notice("Analyzing content...");
+
+    try {
+      // Get topic tags via AI
+      let tags: string[] = [];
+      const topicsContent = await this.reference.getTopicsFileContent();
+
+      if (topicsContent && this.settings.reference.enabled) {
+        const title = view.file?.basename || "Untitled";
+        tags = await this.reference.matchTopicsForContent(title, content);
+      }
+
+      // Get entity mentions
+      const entities = this.indexService.findEntitiesInContent(content);
+
+      // Format results
+      const tagStr = tags.filter(t => t !== "uncategorized").map(t => `#${t}`).join(" ");
+      const entityLinks = entities.map(e => `[[${e.path.replace(".md", "")}|${e.name}]]`);
+
+      if (hasSelection) {
+        // Append tags and links after selection
+        let result = selection;
+        if (tagStr) {
+          result += ` ${tagStr}`;
+        }
+        if (entityLinks.length > 0) {
+          result += `\n\nRelated: ${entityLinks.join(", ")}`;
+        }
+        editor.replaceSelection(result);
+        new Notice(`Added ${tags.length} tags, ${entities.length} entities`);
+      } else {
+        // For full note: add tags to end, show entities in notice
+        const cursor = editor.getCursor();
+        const currentContent = editor.getValue();
+
+        // Append tags at end if any
+        if (tagStr) {
+          const separator = currentContent.endsWith("\n") ? "" : "\n";
+          editor.setValue(currentContent + separator + "\n" + tagStr);
+          editor.setCursor(cursor);
+        }
+
+        // Show entities in notice (don't auto-insert to avoid messing up note structure)
+        if (entityLinks.length > 0) {
+          new Notice(`Tags: ${tagStr || "none"}\nEntities: ${entityLinks.join(", ")}`, 8000);
+        } else {
+          new Notice(`Tags: ${tagStr || "none"}\nNo entities found`, 5000);
+        }
+      }
+    } catch (error) {
+      console.error("[GSD] Tag and link failed:", error);
+      new Notice("Failed to analyze content");
+    }
   }
 
   /**
@@ -664,6 +783,14 @@ export default class GetShitDonePlugin extends Plugin {
        */
       runCouncil: async (): Promise<void> => {
         await this.llmCouncil.runCouncil();
+      },
+
+      /**
+       * Save a URL as a reference note
+       * Usage in Templater: <% await app.plugins.plugins["getshitdone"].api.saveReference(url) %>
+       */
+      saveReference: async (url: string): Promise<string | null> => {
+        return this.reference.processUrl(url);
       },
     };
   }

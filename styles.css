@@ -1,0 +1,469 @@
+/* GetShitDone Plugin Styles */
+
+/* =============================================================================
+   O3 Dashboard
+   ============================================================================= */
+
+.gsd-o3-dashboard {
+  padding: 12px;
+}
+
+.gsd-o3-dashboard h3 {
+  margin: 0 0 8px 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.gsd-o3-dashboard h4 {
+  margin: 16px 0 8px 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Header */
+.gsd-o3-header {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.gsd-o3-header-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.gsd-o3-header-actions button {
+  padding: 4px 10px;
+  font-size: 11px;
+  border-radius: 4px;
+  background: var(--background-modifier-hover);
+  border: 1px solid var(--background-modifier-border);
+  cursor: pointer;
+}
+
+.gsd-o3-header-actions button:hover {
+  background: var(--background-modifier-active-hover);
+}
+
+/* Cards */
+.gsd-o3-card {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  margin-bottom: 8px;
+  background: var(--background-primary);
+  transition: all 0.15s ease;
+}
+
+.gsd-o3-card-collapsed {
+  cursor: pointer;
+}
+
+.gsd-o3-card-collapsed:hover {
+  border-color: var(--interactive-accent);
+  background: var(--background-secondary);
+}
+
+.gsd-o3-card-selected {
+  border-color: var(--interactive-accent);
+  border-width: 2px;
+}
+
+.gsd-o3-card-header {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.gsd-o3-card-collapsed .gsd-o3-card-header {
+  cursor: pointer;
+}
+
+.gsd-o3-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.gsd-o3-expand-indicator {
+  font-size: 10px;
+  color: var(--text-muted);
+  width: 12px;
+}
+
+.gsd-o3-person-name {
+  flex: 1;
+}
+
+.gsd-o3-meeting-time {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: normal;
+}
+
+.gsd-o3-meeting-meta {
+  font-size: 10px;
+  color: var(--text-faint);
+  margin-left: 20px;
+}
+
+/* Expanded Content */
+.gsd-o3-expanded-content {
+  padding: 0 12px 12px 12px;
+  border-top: 1px solid var(--background-modifier-border);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Gather Section */
+.gsd-o3-gather-section {
+  padding-top: 12px;
+}
+
+.gsd-o3-gather-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.gsd-o3-gather-btn {
+  flex: 1;
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 6px;
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  border: none;
+  cursor: pointer;
+}
+
+.gsd-o3-gather-btn:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.gsd-o3-gather-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.gsd-o3-gather-btn.gsd-o3-loading {
+  background: var(--background-modifier-hover);
+  color: var(--text-muted);
+}
+
+.gsd-o3-settings-btn {
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.gsd-o3-settings-btn:hover {
+  background: var(--background-modifier-hover);
+}
+
+/* Source Status */
+.gsd-o3-source-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  font-size: 10px;
+  margin-top: 8px;
+}
+
+.gsd-o3-source-label {
+  color: var(--text-muted);
+}
+
+.gsd-o3-source-badge {
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: var(--background-secondary);
+}
+
+.gsd-o3-source-ok {
+  color: var(--text-success);
+}
+
+.gsd-o3-source-warning {
+  color: var(--text-warning);
+}
+
+.gsd-o3-source-error {
+  color: var(--text-error);
+}
+
+.gsd-o3-source-disabled {
+  color: var(--text-faint);
+  opacity: 0.6;
+}
+
+/* Suggestions Panel */
+.gsd-o3-suggestions-panel {
+  background: var(--background-secondary);
+  border-radius: 6px;
+  padding: 12px;
+}
+
+.gsd-o3-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.gsd-o3-add-suggestion-btn {
+  padding: 4px 10px;
+  font-size: 11px;
+  border-radius: 4px;
+  background: var(--background-modifier-hover);
+  border: 1px solid var(--background-modifier-border);
+  cursor: pointer;
+}
+
+.gsd-o3-add-suggestion-btn:hover {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  border-color: var(--interactive-accent);
+}
+
+.gsd-o3-suggestions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Suggestion Card */
+.gsd-o3-suggestion-card {
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  padding: 10px;
+}
+
+.gsd-o3-suggestion-card.gsd-o3-suggestion-accepted {
+  border-color: var(--interactive-accent);
+  border-left-width: 3px;
+}
+
+.gsd-o3-suggestion-header {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.gsd-o3-suggestion-header input[type="checkbox"] {
+  margin: 0;
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.gsd-o3-suggestion-header select {
+  flex: 1;
+  padding: 4px 8px;
+  font-size: 11px;
+  border-radius: 4px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+}
+
+.gsd-o3-delete-btn {
+  padding: 2px 6px;
+  border-radius: 3px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.gsd-o3-delete-btn:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-error);
+}
+
+.gsd-o3-suggestion-textarea {
+  width: 100%;
+  min-height: 60px;
+  padding: 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  border-radius: 4px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+  resize: vertical;
+}
+
+.gsd-o3-suggestion-textarea:focus {
+  border-color: var(--interactive-accent);
+  outline: none;
+}
+
+.gsd-o3-suggestion-sources {
+  font-size: 10px;
+  color: var(--text-faint);
+  margin-top: 6px;
+}
+
+/* Batch Actions */
+.gsd-o3-batch-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.gsd-o3-batch-actions button {
+  padding: 4px 10px;
+  font-size: 11px;
+  border-radius: 4px;
+  background: var(--background-modifier-hover);
+  border: 1px solid var(--background-modifier-border);
+  cursor: pointer;
+}
+
+.gsd-o3-batch-actions button:hover {
+  background: var(--background-modifier-active-hover);
+}
+
+/* Coach Section */
+.gsd-o3-coach-section {
+  background: var(--background-secondary);
+  border-radius: 6px;
+  padding: 12px;
+}
+
+.gsd-o3-coach-messages {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+  margin-bottom: 10px;
+}
+
+.gsd-o3-coach-msg {
+  padding: 8px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.gsd-o3-coach-user {
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+}
+
+.gsd-o3-coach-assistant {
+  background: var(--background-modifier-hover);
+}
+
+.gsd-o3-coach-msg-label {
+  font-weight: 600;
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.gsd-o3-coach-msg-content {
+  line-height: 1.4;
+}
+
+.gsd-o3-coach-input-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.gsd-o3-coach-input {
+  flex: 1;
+  padding: 8px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+  font-size: 12px;
+}
+
+.gsd-o3-coach-input:focus {
+  border-color: var(--interactive-accent);
+  outline: none;
+}
+
+.gsd-o3-quick-btn {
+  padding: 6px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.gsd-o3-quick-btn:hover {
+  background: var(--background-modifier-hover);
+}
+
+.gsd-o3-coach-loading {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-style: italic;
+  margin-top: 8px;
+}
+
+/* Bottom Actions */
+.gsd-o3-actions {
+  display: flex;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.gsd-o3-add-to-prep-btn {
+  flex: 1;
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 6px;
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  border: none;
+  cursor: pointer;
+}
+
+.gsd-o3-add-to-prep-btn:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.gsd-o3-add-to-prep-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: var(--background-modifier-hover);
+  color: var(--text-muted);
+}
+
+.gsd-o3-overflow-btn {
+  padding: 10px 14px;
+  font-size: 14px;
+  border-radius: 6px;
+  background: var(--background-modifier-hover);
+  border: 1px solid var(--background-modifier-border);
+  cursor: pointer;
+}
+
+.gsd-o3-overflow-btn:hover {
+  background: var(--background-modifier-active-hover);
+}
