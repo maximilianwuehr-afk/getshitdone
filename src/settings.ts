@@ -13,7 +13,7 @@ import { GoogleServices } from "./services/google-services";
 import type { AIService } from "./services/ai-service";
 
 type SettingsTabId = "general" | "daily" | "api" | "inbox" | "ai" | "council" | "openrouter";
-type OpenRouterSortKey = "name" | "provider" | "context" | "cost" | "arena" | "openllm";
+type OpenRouterSortKey = "name" | "provider" | "context" | "cost" | "arena" | "openllm" | "value";
 
 type SettingsHelperOptions = {
   title: string;
@@ -36,6 +36,7 @@ export class GetShitDoneSettingTab extends PluginSettingTab {
   private openRouterSort: OpenRouterSortKey = "name";
   private openRouterSortDirection: "asc" | "desc" = "asc";
   private openLlmOrgIndex = new Map<string, Map<string, string>>();
+  private openRouterSearchFocus: { start: number; end: number } | null = null;
 
   constructor(app: App, plugin: GetShitDonePlugin) {
     super(app, plugin);
@@ -374,8 +375,22 @@ export class GetShitDoneSettingTab extends PluginSettingTab {
     searchInput.value = this.openRouterSearch;
     searchInput.addEventListener("input", () => {
       this.openRouterSearch = searchInput.value;
+      this.openRouterSearchFocus = {
+        start: searchInput.selectionStart ?? this.openRouterSearch.length,
+        end: searchInput.selectionEnd ?? this.openRouterSearch.length,
+      };
       this.display();
     });
+    if (this.openRouterSearchFocus) {
+      const { start, end } = this.openRouterSearchFocus;
+      this.openRouterSearchFocus = null;
+      searchInput.focus();
+      try {
+        searchInput.setSelectionRange(start, end);
+      } catch {
+        // Ignore selection errors for unsupported inputs
+      }
+    }
 
     const providerSelect = filters.createEl("select");
     providerSelect.createEl("option", { text: "All providers", value: "all" });
@@ -413,6 +428,7 @@ export class GetShitDoneSettingTab extends PluginSettingTab {
     sortSelect.createEl("option", { text: "Sort: Cost", value: "cost" });
     sortSelect.createEl("option", { text: "Sort: Arena", value: "arena" });
     sortSelect.createEl("option", { text: "Sort: OpenLLM", value: "openllm" });
+    sortSelect.createEl("option", { text: "Sort: Value", value: "value" });
     sortSelect.value = this.openRouterSort;
     sortSelect.addEventListener("change", () => {
       this.openRouterSort = sortSelect.value as OpenRouterSortKey;
@@ -442,7 +458,7 @@ export class GetShitDoneSettingTab extends PluginSettingTab {
     const table = tableWrap.createEl("table", { cls: "gsd-openrouter-table" });
     const thead = table.createEl("thead");
     const headRow = thead.createEl("tr");
-    ["Select", "Model", "Provider", "Context", "Cost", "Benchmarks", "Tools", "Actions"].forEach(
+    ["Select", "Model", "Provider", "Context", "Cost", "Benchmarks", "Value", "Tools", "Actions"].forEach(
       (label) => headRow.createEl("th", { text: label })
     );
 
@@ -472,6 +488,7 @@ export class GetShitDoneSettingTab extends PluginSettingTab {
       row.createEl("td", { text: `${model.context_length.toLocaleString()} tokens` });
       row.createEl("td", { text: this.formatOpenRouterPricing(model) });
       row.createEl("td", { text: this.formatOpenRouterBenchmark(model) });
+      row.createEl("td", { text: this.formatOpenRouterValue(model) });
       row.createEl("td", {
         text: model.supported_parameters?.includes("tools") ? "Yes" : "No",
       });
@@ -663,6 +680,10 @@ export class GetShitDoneSettingTab extends PluginSettingTab {
           result = compareNumber(bench.openLlmScores[a.id], bench.openLlmScores[b.id]);
           break;
         }
+        case "value": {
+          result = compareNumber(this.getOpenRouterValueScore(a, bench), this.getOpenRouterValueScore(b, bench));
+          break;
+        }
         case "name":
         default: {
           const aName = a.name || a.id;
@@ -722,9 +743,42 @@ export class GetShitDoneSettingTab extends PluginSettingTab {
       parts.push(`OpenLLM ${openLlmScore.toFixed(1)}%`);
     }
     if (parts.length === 0) {
-      return "Bench: N/A";
+      return "N/A";
     }
-    return `Bench: ${parts.join(" · ")}`;
+    return parts.join(" · ");
+  }
+
+  private getOpenRouterValueScore(
+    model: OpenRouterModel,
+    bench = this.plugin.settings.openrouter.benchmarks ?? {
+      arenaScores: {},
+      openLlmScores: {},
+      lastFetched: null,
+    }
+  ): number | null {
+    const openLlmScore = bench.openLlmScores[model.id];
+    const arenaScore = bench.arenaScores[model.id];
+    const score = openLlmScore ?? arenaScore;
+    if (score == null) return null;
+
+    const costPerToken = model.pricing.prompt + model.pricing.completion;
+    if (costPerToken <= 0) return Number.POSITIVE_INFINITY;
+    const costPer1M = costPerToken * 1_000_000;
+    if (!Number.isFinite(costPer1M) || costPer1M <= 0) return null;
+
+    return score / costPer1M;
+  }
+
+  private formatOpenRouterValue(model: OpenRouterModel): string {
+    const value = this.getOpenRouterValueScore(model);
+    if (value == null) {
+      return this.isOpenRouterFreeModel(model) ? "Free" : "N/A";
+    }
+    if (!Number.isFinite(value)) {
+      return "∞";
+    }
+    const formatted = value >= 100 ? value.toFixed(0) : value >= 10 ? value.toFixed(1) : value.toFixed(2);
+    return `${formatted} score/$1M`;
   }
 
   private async fetchOpenRouterBenchmarks(models: OpenRouterModel[]): Promise<void> {
@@ -764,6 +818,38 @@ export class GetShitDoneSettingTab extends PluginSettingTab {
     return value.toLowerCase().replace(/[^a-z0-9]+/g, "");
   }
 
+  private stripHtmlTags(value: string): string {
+    return value.replace(/<[^>]*>/g, "");
+  }
+
+  private getArenaKeyVariants(value: string): string[] {
+    const trimmed = value.trim();
+    if (!trimmed) return [];
+
+    const variants = new Set<string>();
+    const base = this.normalizeBenchmarkKey(trimmed);
+    if (base) {
+      variants.add(base);
+    }
+
+    let next = base.replace(/\d{8}$/g, "").replace(/\d{6}$/g, "");
+    if (next && next !== base) {
+      variants.add(next);
+    }
+
+    const withoutSuffix = next.replace(/(latest|preview|alpha|beta|rc)$/g, "");
+    if (withoutSuffix && withoutSuffix !== next) {
+      variants.add(withoutSuffix);
+    }
+
+    const withoutChatGpt = withoutSuffix.replace(/^chatgpt/, "");
+    if (withoutChatGpt && withoutChatGpt !== withoutSuffix) {
+      variants.add(withoutChatGpt);
+    }
+
+    return Array.from(variants);
+  }
+
   private matchArenaScore(model: OpenRouterModel, arenaMap: Map<string, number>): number | null {
     const candidates = [
       model.name,
@@ -774,10 +860,12 @@ export class GetShitDoneSettingTab extends PluginSettingTab {
     ].filter(Boolean);
 
     for (const candidate of candidates) {
-      const key = this.normalizeBenchmarkKey(candidate);
-      const score = arenaMap.get(key);
-      if (score != null) {
-        return score;
+      const keys = this.getArenaKeyVariants(candidate);
+      for (const key of keys) {
+        const score = arenaMap.get(key);
+        if (score != null) {
+          return score;
+        }
       }
     }
     return null;
@@ -897,7 +985,16 @@ export class GetShitDoneSettingTab extends PluginSettingTab {
           const model = typeof row["Model"] === "string" ? row["Model"] : null;
           const score = typeof row["Arena Score"] === "number" ? row["Arena Score"] : null;
           if (model && score != null) {
-            arenaMap.set(this.normalizeBenchmarkKey(model), score);
+            const markup = typeof row["Model Markup"] === "string" ? row["Model Markup"] : null;
+            const candidates = [model, markup ? this.stripHtmlTags(markup) : null]
+              .filter((value): value is string => Boolean(value));
+            candidates.forEach((candidate) => {
+              this.getArenaKeyVariants(candidate).forEach((key) => {
+                if (!arenaMap.has(key)) {
+                  arenaMap.set(key, score);
+                }
+              });
+            });
           }
         });
 
