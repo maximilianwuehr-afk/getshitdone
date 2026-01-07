@@ -467,3 +467,665 @@
 .gsd-o3-overflow-btn:hover {
   background: var(--background-modifier-active-hover);
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SETTINGS — Refined Design System
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Design Tokens
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.gsd-settings-container {
+  --gsd-accent: #7c9cff;
+  --gsd-accent-dim: rgba(124, 156, 255, 0.15);
+  --gsd-accent-glow: rgba(124, 156, 255, 0.25);
+  --gsd-success: #6bcf8e;
+  --gsd-success-dim: rgba(107, 207, 142, 0.15);
+  --gsd-warning: #e8b55d;
+  --gsd-warning-dim: rgba(232, 181, 93, 0.15);
+  --gsd-error: #e86b6b;
+  --gsd-error-dim: rgba(232, 107, 107, 0.15);
+  --gsd-surface: rgba(255, 255, 255, 0.03);
+  --gsd-surface-raised: rgba(255, 255, 255, 0.05);
+  --gsd-surface-elevated: rgba(255, 255, 255, 0.07);
+  --gsd-border: rgba(255, 255, 255, 0.08);
+  --gsd-border-subtle: rgba(255, 255, 255, 0.04);
+  --gsd-text-primary: var(--text-normal);
+  --gsd-text-secondary: var(--text-muted);
+  --gsd-text-tertiary: var(--text-faint);
+  --gsd-radius: 8px;
+  --gsd-radius-sm: 4px;
+  --gsd-radius-lg: 12px;
+  --gsd-transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Light theme adjustments */
+.theme-light .gsd-settings-container {
+  --gsd-accent: #5c7cdf;
+  --gsd-accent-dim: rgba(92, 124, 223, 0.12);
+  --gsd-accent-glow: rgba(92, 124, 223, 0.2);
+  --gsd-success: #4a9f6e;
+  --gsd-success-dim: rgba(74, 159, 110, 0.12);
+  --gsd-warning: #c99a3d;
+  --gsd-warning-dim: rgba(201, 154, 61, 0.12);
+  --gsd-error: #d65757;
+  --gsd-error-dim: rgba(214, 87, 87, 0.1);
+  --gsd-surface: rgba(0, 0, 0, 0.02);
+  --gsd-surface-raised: rgba(0, 0, 0, 0.04);
+  --gsd-surface-elevated: rgba(0, 0, 0, 0.06);
+  --gsd-border: rgba(0, 0, 0, 0.08);
+  --gsd-border-subtle: rgba(0, 0, 0, 0.04);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Tab Navigation
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.gsd-settings-tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--gsd-border);
+}
+
+.gsd-settings-tab {
+  border: 1px solid var(--gsd-border);
+  background: transparent;
+  color: var(--gsd-text-secondary);
+  padding: 8px 14px;
+  border-radius: 99px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  transition: all var(--gsd-transition);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.gsd-settings-tab:hover {
+  background: var(--gsd-surface-raised);
+  color: var(--gsd-text-primary);
+  border-color: var(--gsd-border);
+}
+
+.gsd-settings-tab.is-active {
+  background: var(--gsd-accent);
+  color: white;
+  border-color: var(--gsd-accent);
+}
+
+.gsd-settings-tab.is-active:hover {
+  background: var(--gsd-accent);
+  filter: brightness(1.1);
+}
+
+.gsd-settings-tab-icon {
+  width: 14px;
+  height: 14px;
+  opacity: 0.7;
+}
+
+.gsd-settings-tab.is-active .gsd-settings-tab-icon {
+  opacity: 1;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Tab Content Area
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.gsd-settings-tab-content {
+  animation: gsd-fade-in 0.2s ease-out;
+}
+
+@keyframes gsd-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.gsd-settings-tab-content > p.setting-item-description:first-child {
+  font-size: 13px;
+  color: var(--gsd-text-tertiary);
+  margin: 0 0 20px 0;
+  line-height: 1.5;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Section Headers
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.gsd-settings-container h2 {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gsd-text-secondary);
+  margin: 28px 0 8px 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--gsd-border-subtle);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.gsd-settings-container h2:first-child {
+  margin-top: 0;
+}
+
+.gsd-settings-container h2 + p.setting-item-description {
+  margin: 0 0 16px 0;
+  font-size: 12px;
+  color: var(--gsd-text-tertiary);
+}
+
+.gsd-settings-container h3 {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--gsd-text-primary);
+  margin: 20px 0 6px 0;
+}
+
+.gsd-settings-container h3 + p.setting-item-description {
+  margin: 0 0 12px 0;
+  font-size: 11px;
+  color: var(--gsd-text-tertiary);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Settings Items
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.gsd-settings-container .setting-item {
+  border-top: none;
+  padding: 10px 0;
+}
+
+.gsd-settings-container .setting-item-info {
+  flex: 1;
+}
+
+.gsd-settings-container .setting-item-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--gsd-text-primary);
+}
+
+.gsd-settings-container .setting-item-description {
+  font-size: 11px;
+  color: var(--gsd-text-tertiary);
+  line-height: 1.4;
+}
+
+/* Toggle switches */
+.gsd-settings-container .checkbox-container {
+  background: var(--gsd-surface-raised);
+  border: 1px solid var(--gsd-border);
+}
+
+.gsd-settings-container .checkbox-container.is-enabled {
+  background: var(--gsd-accent);
+  border-color: var(--gsd-accent);
+}
+
+/* Text inputs */
+.gsd-settings-container input[type="text"],
+.gsd-settings-container input[type="number"],
+.gsd-settings-container input[type="password"] {
+  background: var(--gsd-surface);
+  border: 1px solid var(--gsd-border);
+  border-radius: var(--gsd-radius-sm);
+  padding: 8px 12px;
+  font-size: 12px;
+  transition: all var(--gsd-transition);
+  color: var(--gsd-text-primary);
+}
+
+.gsd-settings-container input[type="text"]:focus,
+.gsd-settings-container input[type="number"]:focus,
+.gsd-settings-container input[type="password"]:focus {
+  border-color: var(--gsd-accent);
+  box-shadow: 0 0 0 2px var(--gsd-accent-dim);
+  outline: none;
+}
+
+/* Textareas */
+.gsd-settings-container textarea {
+  background: var(--gsd-surface);
+  border: 1px solid var(--gsd-border);
+  border-radius: var(--gsd-radius-sm);
+  padding: 10px 12px;
+  font-size: 12px;
+  font-family: var(--font-monospace);
+  line-height: 1.5;
+  transition: all var(--gsd-transition);
+  resize: vertical;
+}
+
+.gsd-settings-container textarea:focus {
+  border-color: var(--gsd-accent);
+  box-shadow: 0 0 0 2px var(--gsd-accent-dim);
+  outline: none;
+}
+
+/* Dropdowns */
+.gsd-settings-container select,
+.gsd-settings-container .dropdown {
+  background: var(--gsd-surface);
+  border: 1px solid var(--gsd-border);
+  border-radius: var(--gsd-radius-sm);
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--gsd-text-primary);
+  cursor: pointer;
+  transition: all var(--gsd-transition);
+}
+
+.gsd-settings-container select:hover,
+.gsd-settings-container .dropdown:hover {
+  border-color: var(--gsd-accent);
+}
+
+/* Sliders */
+.gsd-settings-container input[type="range"] {
+  accent-color: var(--gsd-accent);
+}
+
+/* Buttons */
+.gsd-settings-container button {
+  background: var(--gsd-surface-raised);
+  border: 1px solid var(--gsd-border);
+  border-radius: var(--gsd-radius-sm);
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--gsd-text-secondary);
+  cursor: pointer;
+  transition: all var(--gsd-transition);
+}
+
+.gsd-settings-container button:hover {
+  background: var(--gsd-surface-elevated);
+  color: var(--gsd-text-primary);
+  border-color: var(--gsd-border);
+}
+
+.gsd-settings-container button.mod-cta {
+  background: var(--gsd-accent);
+  color: white;
+  border-color: var(--gsd-accent);
+}
+
+.gsd-settings-container button.mod-cta:hover {
+  filter: brightness(1.1);
+}
+
+.gsd-settings-container button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Collapsible Details Sections
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.gsd-settings-details {
+  margin-top: 16px;
+  border: 1px solid var(--gsd-border-subtle);
+  border-radius: var(--gsd-radius);
+  background: var(--gsd-surface);
+  overflow: hidden;
+}
+
+.gsd-settings-details > summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 12px;
+  padding: 12px 16px;
+  color: var(--gsd-text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all var(--gsd-transition);
+  list-style: none;
+}
+
+.gsd-settings-details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.gsd-settings-details > summary::before {
+  content: '';
+  width: 0;
+  height: 0;
+  border-left: 5px solid currentColor;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  transition: transform var(--gsd-transition);
+  opacity: 0.5;
+}
+
+.gsd-settings-details[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.gsd-settings-details > summary:hover {
+  background: var(--gsd-surface-raised);
+  color: var(--gsd-text-primary);
+}
+
+.gsd-settings-details-body {
+  padding: 0 16px 16px 16px;
+  border-top: 1px solid var(--gsd-border-subtle);
+  animation: gsd-slide-down 0.2s ease-out;
+}
+
+@keyframes gsd-slide-down {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.gsd-settings-details-body > p.setting-item-description:first-child {
+  margin-top: 12px;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   OpenRouter Tab — Tables & Toolbar
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.gsd-openrouter-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 16px 0;
+  align-items: center;
+}
+
+.gsd-openrouter-toolbar input[type="text"] {
+  min-width: 220px;
+  background: var(--gsd-surface);
+  border: 1px solid var(--gsd-border);
+  border-radius: var(--gsd-radius-sm);
+  padding: 8px 12px;
+  font-size: 12px;
+}
+
+.gsd-openrouter-toolbar input[type="text"]:focus {
+  border-color: var(--gsd-accent);
+  box-shadow: 0 0 0 2px var(--gsd-accent-dim);
+  outline: none;
+}
+
+.gsd-openrouter-toolbar select {
+  background: var(--gsd-surface);
+  border: 1px solid var(--gsd-border);
+  border-radius: var(--gsd-radius-sm);
+  padding: 8px 10px;
+  font-size: 12px;
+  color: var(--gsd-text-primary);
+}
+
+.gsd-openrouter-toolbar label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--gsd-text-secondary);
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: var(--gsd-radius-sm);
+  transition: all var(--gsd-transition);
+}
+
+.gsd-openrouter-toolbar label:hover {
+  background: var(--gsd-surface-raised);
+}
+
+.gsd-openrouter-toolbar label input[type="checkbox"] {
+  accent-color: var(--gsd-accent);
+}
+
+.gsd-openrouter-meta {
+  font-size: 11px;
+  color: var(--gsd-text-tertiary);
+  padding: 4px 8px;
+  background: var(--gsd-surface);
+  border-radius: var(--gsd-radius-sm);
+}
+
+.gsd-openrouter-table-wrap {
+  border: 1px solid var(--gsd-border);
+  border-radius: var(--gsd-radius);
+  background: var(--gsd-surface);
+  overflow-x: auto;
+  margin-top: 16px;
+}
+
+.gsd-openrouter-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.gsd-openrouter-table th,
+.gsd-openrouter-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--gsd-border-subtle);
+  vertical-align: top;
+  text-align: left;
+}
+
+.gsd-openrouter-table thead th {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--gsd-text-tertiary);
+  background: var(--gsd-surface-raised);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.gsd-openrouter-table tbody tr {
+  transition: background var(--gsd-transition);
+}
+
+.gsd-openrouter-table tbody tr:hover {
+  background: var(--gsd-surface-raised);
+}
+
+.gsd-openrouter-table tbody tr.is-selected {
+  background: var(--gsd-accent-dim);
+}
+
+.gsd-openrouter-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.gsd-openrouter-row-title {
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--gsd-text-primary);
+}
+
+.gsd-openrouter-row-id {
+  font-family: var(--font-monospace);
+  font-size: 10px;
+  color: var(--gsd-text-tertiary);
+  margin-top: 2px;
+}
+
+.gsd-openrouter-table-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.gsd-openrouter-table-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.gsd-openrouter-table-actions button {
+  padding: 4px 8px;
+  font-size: 11px;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   OpenRouter — Free Model Ranking
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.gsd-openrouter-rank-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 12px;
+}
+
+.gsd-openrouter-rank-item {
+  border: 1px solid var(--gsd-border);
+  border-radius: var(--gsd-radius-sm);
+  padding: 10px 12px;
+  background: var(--gsd-surface);
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  transition: all var(--gsd-transition);
+}
+
+.gsd-openrouter-rank-item:hover {
+  background: var(--gsd-surface-raised);
+}
+
+.gsd-openrouter-rank-item.is-dragging {
+  opacity: 0.5;
+  background: var(--gsd-accent-dim);
+}
+
+.gsd-openrouter-rank-item.is-drop-target {
+  border-color: var(--gsd-accent);
+  background: var(--gsd-accent-dim);
+}
+
+.gsd-openrouter-rank-handle {
+  font-size: 12px;
+  color: var(--gsd-text-tertiary);
+  cursor: grab;
+  margin-right: 8px;
+  opacity: 0.5;
+  transition: opacity var(--gsd-transition);
+}
+
+.gsd-openrouter-rank-item:hover .gsd-openrouter-rank-handle {
+  opacity: 1;
+}
+
+.gsd-openrouter-rank-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.gsd-openrouter-rank-name {
+  font-weight: 500;
+  font-size: 12px;
+  color: var(--gsd-text-primary);
+}
+
+.gsd-openrouter-rank-id {
+  font-family: var(--font-monospace);
+  font-size: 10px;
+  color: var(--gsd-text-tertiary);
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gsd-openrouter-rank-position {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--gsd-text-tertiary);
+  background: var(--gsd-surface-raised);
+  padding: 2px 8px;
+  border-radius: 99px;
+  min-width: 24px;
+  text-align: center;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Status Indicators
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.gsd-status-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.gsd-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 99px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.gsd-status-badge.is-configured {
+  background: var(--gsd-success-dim);
+  color: var(--gsd-success);
+}
+
+.gsd-status-badge.is-missing {
+  background: var(--gsd-surface-raised);
+  color: var(--gsd-text-tertiary);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Code Blocks
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.gsd-code-block {
+  background: var(--gsd-surface);
+  border: 1px solid var(--gsd-border);
+  border-radius: var(--gsd-radius-sm);
+  padding: 12px 14px;
+  font-family: var(--font-monospace);
+  font-size: 11px;
+  line-height: 1.5;
+  overflow-x: auto;
+  color: var(--gsd-text-secondary);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Empty States
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.gsd-empty-state {
+  padding: 32px 16px;
+  text-align: center;
+  color: var(--gsd-text-tertiary);
+  font-size: 12px;
+  background: var(--gsd-surface);
+  border-radius: var(--gsd-radius);
+  border: 1px dashed var(--gsd-border);
+}
