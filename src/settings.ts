@@ -48,8 +48,8 @@ export class GetShitDoneSettingTab extends PluginSettingTab {
   display(): void {
     const { containerEl } = this;
     containerEl.empty();
+    containerEl.addClass("gsd-settings-container");
 
-    this.ensureStyles();
     this.renderTabs(containerEl);
 
     const contentEl = containerEl.createDiv({ cls: "gsd-settings-tab-content" });
@@ -77,141 +77,6 @@ export class GetShitDoneSettingTab extends PluginSettingTab {
         this.renderCouncilTab(contentEl);
         break;
     }
-  }
-
-  private ensureStyles(): void {
-    const styleId = "gsd-settings-tabs-style";
-    if (document.getElementById(styleId)) return;
-
-    const style = document.createElement("style");
-    style.id = styleId;
-    style.textContent = `
-      .gsd-settings-tabs {
-        display: flex;
-        gap: 8px;
-        flex-wrap: wrap;
-        margin-bottom: 16px;
-      }
-      .gsd-settings-tab {
-        border: 1px solid var(--background-modifier-border);
-        background: var(--background-secondary);
-        color: var(--text-normal);
-        padding: 6px 10px;
-        border-radius: 8px;
-        cursor: pointer;
-        font-size: 13px;
-      }
-      .gsd-settings-tab.is-active {
-        background: var(--interactive-accent);
-        color: var(--text-on-accent);
-        border-color: var(--interactive-accent);
-      }
-      .gsd-settings-details {
-        margin-top: 12px;
-        border: 1px solid var(--background-modifier-border);
-        border-radius: 8px;
-        padding: 8px 12px;
-        background: var(--background-secondary);
-      }
-      .gsd-settings-details > summary {
-        cursor: pointer;
-        font-weight: 600;
-      }
-      .gsd-settings-details-body {
-        margin-top: 8px;
-      }
-      .gsd-openrouter-toolbar {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 10px;
-        margin: 12px 0;
-        align-items: center;
-      }
-      .gsd-openrouter-toolbar input[type="text"] {
-        min-width: 220px;
-      }
-      .gsd-openrouter-meta {
-        font-size: 12px;
-        color: var(--text-muted);
-      }
-      .gsd-openrouter-table-wrap {
-        border: 1px solid var(--background-modifier-border);
-        border-radius: 10px;
-        background: var(--background-secondary);
-        overflow-x: auto;
-        margin-top: 12px;
-      }
-      .gsd-openrouter-table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 12px;
-      }
-      .gsd-openrouter-table th,
-      .gsd-openrouter-table td {
-        padding: 8px 10px;
-        border-bottom: 1px solid var(--background-modifier-border);
-        vertical-align: top;
-      }
-      .gsd-openrouter-table thead th {
-        text-align: left;
-        color: var(--text-muted);
-        font-weight: 600;
-        background: var(--background-secondary);
-        position: sticky;
-        top: 0;
-        z-index: 1;
-      }
-      .gsd-openrouter-table tbody tr.is-selected {
-        background: var(--background-modifier-hover);
-      }
-      .gsd-openrouter-row-title {
-        font-weight: 600;
-        font-size: 13px;
-      }
-      .gsd-openrouter-row-id {
-        font-family: var(--font-monospace);
-        font-size: 12px;
-        color: var(--text-muted);
-      }
-      .gsd-openrouter-table-actions {
-        display: flex;
-        gap: 8px;
-        align-items: center;
-      }
-      .gsd-openrouter-table-meta {
-        display: flex;
-        flex-direction: column;
-        gap: 2px;
-      }
-      .gsd-openrouter-rank-list {
-        display: grid;
-        gap: 8px;
-        margin-top: 8px;
-      }
-      .gsd-openrouter-rank-item {
-        border: 1px solid var(--background-modifier-border);
-        border-radius: 8px;
-        padding: 8px 10px;
-        background: var(--background-secondary);
-        display: flex;
-        justify-content: space-between;
-        gap: 12px;
-        align-items: center;
-      }
-      .gsd-openrouter-rank-item.is-dragging {
-        opacity: 0.6;
-      }
-      .gsd-openrouter-rank-item.is-drop-target {
-        border-color: var(--interactive-accent);
-      }
-      .gsd-openrouter-rank-handle {
-        font-size: 14px;
-        color: var(--text-muted);
-        cursor: grab;
-        margin-right: 6px;
-      }
-    `;
-    document.head.appendChild(style);
   }
 
   private renderTabs(containerEl: HTMLElement): void {
