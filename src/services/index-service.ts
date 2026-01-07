@@ -1,5 +1,13 @@
+// ============================================================================
+// Index Service - In-memory indexes for people/org lookups
+// ============================================================================
+
 import { App, TFile, MetadataCache, Vault } from "obsidian";
 import type { PluginSettings } from "../types";
+
+// ============================================================================
+// IndexService Class
+// ============================================================================
 
 /**
  * Index Service - Maintains in-memory indexes for fast lookups

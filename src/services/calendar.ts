@@ -1,7 +1,15 @@
+// ============================================================================
+// Calendar Service - Wrapper for google-calendar plugin
+// ============================================================================
+
 import { App, Notice } from "obsidian";
 import type { CalendarEvent } from "../types";
 import type { Moment } from "moment";
 import { handleErrorWithDefault } from "../utils/error-handler";
+
+// ============================================================================
+// CalendarService Class
+// ============================================================================
 
 /**
  * Calendar Service - Wrapper for the google-calendar plugin

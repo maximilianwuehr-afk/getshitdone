@@ -1,7 +1,15 @@
+// ============================================================================
+// OpenAI Provider - OpenAI/GPT model implementation
+// ============================================================================
+
 import { requestUrl, RequestUrlResponse } from "obsidian";
 import type { PluginSettings } from "../types";
 import type { AIProvider, AICallOptions } from "./ai-provider";
 import { handleError, handleErrorWithDefault, getErrorMessage } from "../utils/error-handler";
+
+// ============================================================================
+// Types
+// ============================================================================
 
 /**
  * OpenAI Responses API Response Types

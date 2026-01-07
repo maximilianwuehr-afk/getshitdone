@@ -1,8 +1,12 @@
+// ============================================================================
+// Error Handler - Unified error handling utilities
+// ============================================================================
+
 import { Notice } from "obsidian";
 
-/**
- * Error handling utility for consistent error management across the plugin
- */
+// ============================================================================
+// Message Extraction
+// ============================================================================
 
 /**
  * Extract a user-friendly error message from an unknown error

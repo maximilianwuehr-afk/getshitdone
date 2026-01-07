@@ -1,3 +1,7 @@
+// ============================================================================
+// Daily Note Action - Daily meeting lists and briefing triggers
+// ============================================================================
+
 import { App, TFile } from "obsidian";
 import type {
   PluginSettings,
@@ -13,6 +17,10 @@ import { MeetingBriefingAction } from "./meeting-briefing";
 import { handleError } from "../utils/error-handler";
 
 const moment = (window as any).moment;
+
+// ============================================================================
+// DailyNoteAction Class
+// ============================================================================
 
 /**
  * Daily Note Action

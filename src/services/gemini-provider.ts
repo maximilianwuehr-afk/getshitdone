@@ -1,7 +1,15 @@
+// ============================================================================
+// Gemini Provider - Google Gemini AI model implementation
+// ============================================================================
+
 import { requestUrl, RequestUrlResponse } from "obsidian";
 import type { PluginSettings, GeminiResponse } from "../types";
 import type { AIProvider, AICallOptions } from "./ai-provider";
 import { handleErrorWithDefault } from "../utils/error-handler";
+
+// ============================================================================
+// GeminiProvider Class
+// ============================================================================
 
 /**
  * Gemini Provider

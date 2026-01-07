@@ -1,7 +1,15 @@
+// ============================================================================
+// Google Services - Gmail, Drive, Calendar via Apps Script
+// ============================================================================
+
 import { requestUrl, RequestUrlResponse } from "obsidian";
-import type { PluginSettings, GmailMessage, AppsScriptResponse, GeminiResponse } from "../types";
+import type { PluginSettings, GmailMessage, AppsScriptResponse } from "../types";
 import type { AIService } from "./ai-service";
 import { handleErrorWithDefault } from "../utils/error-handler";
+
+// ============================================================================
+// GoogleServices Class
+// ============================================================================
 
 /**
  * Google Services - Handles all Google API interactions
@@ -9,11 +17,11 @@ import { handleErrorWithDefault } from "../utils/error-handler";
  */
 export class GoogleServices {
   private settings: PluginSettings;
-  private aiService: AIService | null = null;
+  private aiService: AIService;
 
-  constructor(settings: PluginSettings, aiService?: AIService) {
+  constructor(settings: PluginSettings, aiService: AIService) {
     this.settings = settings;
-    this.aiService = aiService || null;
+    this.aiService = aiService;
   }
 
   /**
@@ -23,13 +31,6 @@ export class GoogleServices {
     this.settings = settings;
   }
 
-  /**
-   * Set AIService reference (called when AIService is initialized)
-   */
-  setAIService(aiService: AIService): void {
-    this.aiService = aiService;
-  }
-
   // ============================================================================
   // AI API (via AIService)
   // ============================================================================
@@ -37,7 +38,6 @@ export class GoogleServices {
   /**
    * Call AI model for AI-powered research
    * Convenience wrapper that delegates to AIService
-   * Maintains backward compatibility with existing callGemini signature
    */
   async callGemini(
     system: string,
@@ -46,95 +46,25 @@ export class GoogleServices {
     useSearch: boolean = true,
     generationConfigOverride?: Record<string, any>
   ): Promise<string | null> {
-    // If AIService is available, use it
-    if (this.aiService) {
-      const options: {
-        useSearch?: boolean;
-        temperature?: number;
-        thinkingBudget?: "low" | "medium" | "high" | null;
-      } = {
-        useSearch,
-      };
+    const options: {
+      useSearch?: boolean;
+      temperature?: number;
+      thinkingBudget?: "low" | "medium" | "high" | null;
+    } = {
+      useSearch,
+    };
 
-      // Extract options from generationConfigOverride
-      if (generationConfigOverride) {
-        if (generationConfigOverride.temperature != null) {
-          options.temperature = generationConfigOverride.temperature;
-        }
-        if (generationConfigOverride.thinkingBudget != null) {
-          options.thinkingBudget = generationConfigOverride.thinkingBudget;
-        }
+    // Extract options from generationConfigOverride
+    if (generationConfigOverride) {
+      if (generationConfigOverride.temperature != null) {
+        options.temperature = generationConfigOverride.temperature;
       }
-
-      return this.aiService.callModel(system, user, model, options);
+      if (generationConfigOverride.thinkingBudget != null) {
+        options.thinkingBudget = generationConfigOverride.thinkingBudget;
+      }
     }
 
-    // Fallback: old implementation for backward compatibility
-    // This should not be reached in normal operation after AIService is initialized
-    console.warn("[GSD] callGemini called without AIService, using fallback");
-    if (!this.settings.geminiApiKey) {
-      console.warn("[GSD] No Gemini API key configured");
-      return null;
-    }
-
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${this.settings.geminiApiKey}`;
-    const tools = useSearch ? [{ googleSearch: {} }] : [];
-
-    try {
-      const generationConfig: Record<string, any> = {
-        temperature: 0.2,
-        ...(generationConfigOverride || {}),
-      };
-
-      // Handle thinkingBudget (supports both old number format and new string format)
-      if (generationConfig.thinkingBudget != null && generationConfig.thinkingConfig == null) {
-        if (typeof generationConfig.thinkingBudget === "number") {
-          // Old format: direct number
-          generationConfig.thinkingConfig = { thinkingBudget: generationConfig.thinkingBudget };
-          delete generationConfig.thinkingBudget;
-        } else if (typeof generationConfig.thinkingBudget === "string") {
-          // New format: low/medium/high -> map to tokens
-          const tokenMap: Record<"low" | "medium" | "high", number> = {
-            low: 512,
-            medium: 2048,
-            high: 4096,
-          };
-          const tokenBudget = tokenMap[generationConfig.thinkingBudget as "low" | "medium" | "high"];
-          if (tokenBudget) {
-            generationConfig.thinkingConfig = { thinkingBudget: tokenBudget };
-            delete generationConfig.thinkingBudget;
-          }
-        }
-      }
-
-      const response: RequestUrlResponse = await requestUrl({
-        url: url,
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: system + "\n\nUser Input:\n" + user }] }],
-          tools: tools,
-          generationConfig,
-        }),
-      });
-
-      const data = response.json as GeminiResponse;
-      if (
-        data.candidates &&
-        data.candidates.length > 0 &&
-        data.candidates[0].content &&
-        data.candidates[0].content.parts
-      ) {
-        return data.candidates[0].content.parts.map((p) => p.text).join("");
-      }
-      return null;
-    } catch (error: unknown) {
-      return handleErrorWithDefault(
-        "Gemini API Error (via GoogleServices)",
-        error,
-        null
-      );
-    }
+    return this.aiService.callModel(system, user, model, options);
   }
 
   // ============================================================================
@@ -317,7 +247,7 @@ export class GoogleServices {
         "Doc read failed",
         error,
         null,
-        { additionalContext: { docId } }
+        { additionalContext: { fileId } }
       );
     }
   }

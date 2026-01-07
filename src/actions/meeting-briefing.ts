@@ -1,3 +1,7 @@
+// ============================================================================
+// Meeting Briefing Action - AI-powered meeting prep and briefings
+// ============================================================================
+
 import { App, TFile, MarkdownView } from "obsidian";
 import type {
   PluginSettings,
@@ -13,6 +17,10 @@ import type { FeedbackAction } from "./feedback";
 import { handleError } from "../utils/error-handler";
 
 const moment = (window as any).moment;
+
+// ============================================================================
+// MeetingBriefingAction Class
+// ============================================================================
 
 /**
  * Meeting Briefing Action
@@ -53,6 +61,20 @@ export class MeetingBriefingAction {
    */
   setFeedback(feedback: FeedbackAction): void {
     this.feedback = feedback;
+  }
+
+  /**
+   * Check if personResearch dependency is wired
+   */
+  hasPersonResearch(): boolean {
+    return this.personResearch !== null;
+  }
+
+  /**
+   * Check if feedback dependency is wired
+   */
+  hasFeedback(): boolean {
+    return this.feedback !== null;
   }
 
   /**

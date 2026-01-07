@@ -1,6 +1,14 @@
+// ============================================================================
+// Vault Search Service - Note lookup and context gathering
+// ============================================================================
+
 import { App, TFile, Vault } from "obsidian";
 import type { PluginSettings, PersonFrontmatter, OrgFrontmatter } from "../types";
 import type { IndexService } from "./index-service";
+
+// ============================================================================
+// VaultSearchService Class
+// ============================================================================
 
 /**
  * Vault Search Service - Searches and manages vault content

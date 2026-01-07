@@ -1,7 +1,15 @@
+// ============================================================================
+// Feedback Action - User feedback collection for research quality
+// ============================================================================
+
 import { App, TFile, Notice, Modal, Setting } from "obsidian";
 import type { PluginSettings, FeedbackEntry, FeedbackStore } from "../types";
 
 const moment = (window as any).moment;
+
+// ============================================================================
+// FeedbackAction Class
+// ============================================================================
 
 /**
  * Feedback Action
