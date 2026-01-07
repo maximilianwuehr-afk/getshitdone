@@ -1,3 +1,7 @@
+// ============================================================================
+// LLM Council Action - Multi-LLM ideation, execution, and judgment
+// ============================================================================
+
 import { App, TFile, Notice } from "obsidian";
 import type {
   PluginSettings,
@@ -6,6 +10,10 @@ import type {
 import { AIService } from "../services/ai-service";
 import { CouncilRunnerService } from "../services/council-runner";
 import { handleError } from "../utils/error-handler";
+
+// ============================================================================
+// LlmCouncilAction Class
+// ============================================================================
 
 /**
  * LLM Council Action

@@ -1,7 +1,15 @@
+// ============================================================================
+// OpenRouter Provider - Multi-model router implementation
+// ============================================================================
+
 import { requestUrl, RequestUrlResponse } from "obsidian";
 import type { PluginSettings, OpenRouterModel } from "../types";
 import type { AIProvider, AICallOptions } from "./ai-provider";
 import { handleError, handleErrorWithDefault, getErrorMessage } from "../utils/error-handler";
+
+// ============================================================================
+// Types
+// ============================================================================
 
 interface OpenRouterChatResponse {
   choices?: Array<{
@@ -18,6 +26,10 @@ type OpenRouterAttemptResult = {
   text: string | null;
   retryable: boolean;
 };
+
+// ============================================================================
+// Constants
+// ============================================================================
 
 const AUTO_FREE_MODELS = new Set([
   "openrouter:auto-free",

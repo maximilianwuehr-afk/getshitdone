@@ -1,9 +1,17 @@
+// ============================================================================
+// AI Service - Unified AI interface with provider routing
+// ============================================================================
+
 import type { PluginSettings } from "../types";
 import type { AIProvider, AICallOptions } from "./ai-provider";
 import { GeminiProvider } from "./gemini-provider";
 import { OpenAIProvider } from "./openai-provider";
 import { AnthropicProvider } from "./anthropic-provider";
 import { OpenRouterProvider } from "./openrouter-provider";
+
+// ============================================================================
+// AIService Class
+// ============================================================================
 
 /**
  * AI Service

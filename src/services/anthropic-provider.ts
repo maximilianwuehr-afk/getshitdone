@@ -1,7 +1,15 @@
+// ============================================================================
+// Anthropic Provider - Claude model implementation
+// ============================================================================
+
 import { requestUrl, RequestUrlResponse } from "obsidian";
 import type { PluginSettings } from "../types";
 import type { AIProvider, AICallOptions } from "./ai-provider";
 import { handleErrorWithDefault, handleError, getErrorMessage } from "../utils/error-handler";
+
+// ============================================================================
+// Types
+// ============================================================================
 
 /**
  * Anthropic API Response Types

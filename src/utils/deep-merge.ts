@@ -1,3 +1,7 @@
+// ============================================================================
+// Deep Merge - Recursive object merging for settings
+// ============================================================================
+
 /**
  * Deep merge utility for settings objects.
  * Recursively merges source into target, preserving nested defaults.

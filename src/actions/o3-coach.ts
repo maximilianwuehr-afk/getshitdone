@@ -1,3 +1,7 @@
+// ============================================================================
+// O3 Coach Action - AI coaching for 1:1 meetings
+// ============================================================================
+
 import { App, Notice, TFile } from "obsidian";
 import type { CalendarEvent, PluginSettings } from "../types";
 import { VaultSearchService } from "../services/vault-search";
@@ -7,6 +11,10 @@ import { AIService } from "../services/ai-service";
 import type { O3Person } from "./o3-prep";
 
 const moment = (window as any).moment;
+
+// ============================================================================
+// Types
+// ============================================================================
 
 export type O3CoachMode = "week" | "person";
 
@@ -47,6 +55,10 @@ export type O3CoachResponse = {
   warnings: string[];
   raw: string;
 };
+
+// ============================================================================
+// O3CoachAction Class
+// ============================================================================
 
 type O3CoachRunOptions = {
   mode: O3CoachMode;

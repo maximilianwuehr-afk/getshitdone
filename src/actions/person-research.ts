@@ -1,3 +1,7 @@
+// ============================================================================
+// Person Research Action - Auto-research people and update notes
+// ============================================================================
+
 import { App, TFile, Notice } from "obsidian";
 import type {
   PluginSettings,
@@ -14,6 +18,10 @@ import type { FeedbackAction } from "./feedback";
 import { handleError } from "../utils/error-handler";
 
 const moment = (window as any).moment;
+
+// ============================================================================
+// PersonResearchAction Class
+// ============================================================================
 
 /**
  * Person Research Action
@@ -54,6 +62,13 @@ export class PersonResearchAction {
    */
   setFeedback(feedback: FeedbackAction): void {
     this.feedback = feedback;
+  }
+
+  /**
+   * Check if feedback dependency is wired
+   */
+  hasFeedback(): boolean {
+    return this.feedback !== null;
   }
 
   /**

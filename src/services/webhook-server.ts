@@ -1,7 +1,15 @@
+// ============================================================================
+// Webhook Server - HTTP server for Amie transcripts and external webhooks
+// ============================================================================
+
 import * as http from "http";
 import { Notice } from "obsidian";
 import type { PluginSettings, AmieWebhookPayload } from "../types";
 import type { AmieTranscriptAction } from "../actions/amie-transcript";
+
+// ============================================================================
+// WebhookServer Class
+// ============================================================================
 
 /**
  * HTTP webhook server for receiving external requests.

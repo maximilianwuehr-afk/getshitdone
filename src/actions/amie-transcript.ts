@@ -1,3 +1,7 @@
+// ============================================================================
+// Amie Transcript Action - Meeting transcript processing from webhooks
+// ============================================================================
+
 import { App, TFile, TFolder, Notice } from "obsidian";
 import type { PluginSettings, AmieWebhookPayload, CalendarEvent } from "../types";
 import type { CalendarService } from "../services/calendar";
@@ -5,10 +9,18 @@ import { handleErrorWithDefault } from "../utils/error-handler";
 
 const moment = (window as any).moment;
 
+// ============================================================================
+// Types
+// ============================================================================
+
 export interface TranscriptResult {
   notePath: string;
   action: "created" | "updated";
 }
+
+// ============================================================================
+// AmieTranscriptAction Class
+// ============================================================================
 
 /**
  * Amie Transcript Action - Processes meeting transcripts from Amie webhooks

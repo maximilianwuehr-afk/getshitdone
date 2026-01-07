@@ -1,3 +1,7 @@
+// ============================================================================
+// Reference Action - URL processing into structured reference notes
+// ============================================================================
+
 import { App, TFile, Notice, parseYaml } from "obsidian";
 import type {
   PluginSettings,
@@ -10,6 +14,10 @@ import { AIService } from "../services/ai-service";
 import { handleError } from "../utils/error-handler";
 
 const moment = (window as any).moment;
+
+// ============================================================================
+// Types
+// ============================================================================
 
 type SummarizeAPI = {
   summarizeUrl: (
@@ -33,6 +41,10 @@ interface ReferenceData {
   entities: Array<{ type: "person" | "org"; name: string; path: string }>;
   created: string;
 }
+
+// ============================================================================
+// ReferenceAction Class
+// ============================================================================
 
 /**
  * Reference Action

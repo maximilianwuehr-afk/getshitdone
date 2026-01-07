@@ -1,3 +1,7 @@
+// ============================================================================
+// Council Runner Service - LLM Council orchestration engine
+// ============================================================================
+
 import { App, TFile, TFolder, Notice, parseYaml } from "obsidian";
 import type {
   PluginSettings,
@@ -11,6 +15,10 @@ import type {
 import { AIService } from "./ai-service";
 
 const moment = (window as any).moment;
+
+// ============================================================================
+// YAML Helpers
+// ============================================================================
 
 /**
  * Pre-process YAML string to quote array items containing special characters

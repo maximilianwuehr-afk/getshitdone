@@ -1,3 +1,7 @@
+// ============================================================================
+// Organization Research Action - Auto-research orgs and update notes
+// ============================================================================
+
 import { App, TFile, Notice } from "obsidian";
 import type { PluginSettings, OrgResearchResult, OrgFrontmatter } from "../types";
 import { GoogleServices } from "../services/google-services";
@@ -5,6 +9,10 @@ import { AIService } from "../services/ai-service";
 import { VaultSearchService } from "../services/vault-search";
 import type { FeedbackAction } from "./feedback";
 import { handleError } from "../utils/error-handler";
+
+// ============================================================================
+// OrgResearchAction Class
+// ============================================================================
 
 /**
  * Organization Research Action
@@ -44,6 +52,13 @@ export class OrgResearchAction {
    */
   setFeedback(feedback: FeedbackAction): void {
     this.feedback = feedback;
+  }
+
+  /**
+   * Check if feedback dependency is wired
+   */
+  hasFeedback(): boolean {
+    return this.feedback !== null;
   }
 
   /**
